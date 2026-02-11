@@ -26,7 +26,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import com.example.ks1compose.models.RetrofitInstance
-import com.example.ks1compose.repositories.NewsViewModel
+import com.example.ks1compose.viewmodels.NewsViewModel
 import com.example.ks1compose.ui.theme.VeryLightGrey
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch

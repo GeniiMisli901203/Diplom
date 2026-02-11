@@ -1,20 +1,44 @@
 package com.example.ks1compose.models
 
+import okhttp3.Interceptor
 import okhttp3.OkHttpClient
+import okhttp3.Response
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
 
-object RetrofitInstance {
+class AuthInterceptor : Interceptor {
+    override fun intercept(chain: Interceptor.Chain): Response {
+        val originalRequest = chain.request()
+
+        // Добавляем токен если он есть
+        val token = TokenManager.authToken
+        val request = if (!token.isNullOrEmpty()) {
+            originalRequest.newBuilder()
+                .header("Authorization", "Bearer $token")
+                .build()
+        } else {
+            originalRequest
+        }
+
+        return chain.proceed(request)
+    }
+}
+
+// Обновленный RetrofitInstance с AuthInterceptor
+object RetrofitInstanceWithAuth {
     private const val BASE_URL = "http://10.0.2.2:8080/"
 
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
         level = HttpLoggingInterceptor.Level.BODY
     }
 
+    private val authInterceptor = AuthInterceptor()
+
     private val okHttpClient = OkHttpClient.Builder()
         .addInterceptor(loggingInterceptor)
+        .addInterceptor(authInterceptor)
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)
@@ -31,28 +55,4 @@ object RetrofitInstance {
     val apiService: ApiService by lazy {
         retrofit.create(ApiService::class.java)
     }
-}
-
-
-object TokenManager {
-    var authToken: String? = null
-    var userId: String? = null
-    var userRole: String? = null
-    var userName: String? = null
-    var userSName: String? = null
-
-    fun clear() {
-        authToken = null
-        userId = null
-        userRole = null
-        userName = null
-        userSName = null
-    }
-
-    val fullName: String?
-        get() = if (userName != null && userSName != null) {
-            "$userName $userSName"
-        } else {
-            null
-        }
 }

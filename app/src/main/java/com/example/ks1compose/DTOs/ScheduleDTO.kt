@@ -1,17 +1,19 @@
 package com.example.ks1compose.DTOs
 
-import com.google.gson.annotations.SerializedName
+import kotlinx.serialization.Serializable
 
+@Serializable
 data class ScheduleDTO(
-    @SerializedName("scheduleId") val scheduleId: String = "",
-    @SerializedName("className") val className: String,
-    @SerializedName("day") val day: String,
-    @SerializedName("lessons") val lessons: List<String>,
-    @SerializedName("office") val office: List<String>
+    val scheduleId: String = "",
+    val className: String,
+    val day: String,
+    val lessons: List<String>,
+    val office: List<String>
 )
 
+@Serializable
 data class ScheduleResponse(
-    @SerializedName("success") val success: Boolean,
-    @SerializedName("message") val message: String? = null,
-    @SerializedName("schedules") val schedules: List<ScheduleDTO>? = null
+    val success: Boolean,
+    val message: String? = null,
+    val schedules: List<ScheduleDTO>? = null
 )

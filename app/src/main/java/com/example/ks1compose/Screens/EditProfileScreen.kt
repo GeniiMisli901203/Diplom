@@ -23,7 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.ks1compose.PersonalUsefulElements.PersonalButton
 import com.example.ks1compose.PersonalUsefulElements.PersonalTextField
-import com.example.ks1compose.repositories.UserViewModel
+import com.example.ks1compose.viewmodels.UserViewModel
 import com.example.ks1compose.ui.theme.LightGrey
 import kotlinx.coroutines.launch
 

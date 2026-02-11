@@ -40,7 +40,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.ks1compose.repositories.NewsViewModel
+import com.example.ks1compose.viewmodels.NewsViewModel
 import com.example.ks1compose.ui.theme.DarkPink
 
 @Composable

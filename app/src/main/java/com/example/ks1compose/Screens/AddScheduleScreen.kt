@@ -18,7 +18,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.ks1compose.DTOs.ScheduleDTO
-import com.example.ks1compose.repositories.ScheduleViewModel
+import com.example.ks1compose.viewmodels.ScheduleViewModel
 
 @Composable
 fun AddScheduleScreen(

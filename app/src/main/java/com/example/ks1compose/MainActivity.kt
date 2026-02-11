@@ -5,8 +5,6 @@ import android.content.pm.ActivityInfo
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -63,7 +61,7 @@ import com.example.ks1compose.Screens.LoginScreen
 import com.example.ks1compose.Screens.RegistrationScreen
 import com.example.ks1compose.Screens.ScheduleScreen
 import com.example.ks1compose.Screens.SearchScreen
-import com.example.ks1compose.repositories.ScheduleViewModel
+import com.example.ks1compose.viewmodels.ScheduleViewModel
 import com.example.ks1compose.ui.theme.DarkGrey
 import com.example.ks1compose.ui.theme.KS1ComposeTheme
 import com.example.ks1compose.ui.theme.LightGrey
