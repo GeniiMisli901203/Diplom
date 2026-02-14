@@ -1,9 +1,10 @@
 package com.example.ks1compose.viewmodels
 
+import com.example.ks1compose.models.RegistrationRequest
+
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.ks1compose.models.RegistrationRequest
 import com.example.ks1compose.models.TokenResponse
 import com.example.ks1compose.repositories.AuthRepository
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -13,19 +14,40 @@ import kotlinx.coroutines.launch
 class AuthViewModel : ViewModel() {
     private val repository = AuthRepository()
 
-    private val _loginResult = MutableStateFlow<AuthRepository.Result<TokenResponse>?>(null)
-    val loginResult: StateFlow<AuthRepository.Result<TokenResponse>?> = _loginResult
+    sealed class AuthResult {
+        data class Success(val data: TokenResponse) : AuthResult()
+        data class Error(val message: String) : AuthResult()
+        object Loading : AuthResult()
+    }
 
-    private val _registerResult = MutableStateFlow<AuthRepository.Result<TokenResponse>?>(null)
-    val registerResult: StateFlow<AuthRepository.Result<TokenResponse>?> = _registerResult
+    private val _loginResult = MutableStateFlow<AuthResult?>(null)
+    val loginResult: StateFlow<AuthResult?> = _loginResult
+
+    private val _registerResult = MutableStateFlow<AuthResult?>(null)
+    val registerResult: StateFlow<AuthResult?> = _registerResult
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading
 
+    private val _errorMessage = MutableStateFlow<String?>(null)
+    val errorMessage: StateFlow<String?> = _errorMessage
+
     fun login(login: String, password: String) {
         viewModelScope.launch {
             _isLoading.value = true
-            _loginResult.value = repository.login(login, password)
+            _loginResult.value = AuthResult.Loading
+
+            val result = repository.login(login, password)
+            when (result) {
+                is AuthRepository.Result.Success -> {
+                    _loginResult.value = AuthResult.Success(result.data)
+                }
+                is AuthRepository.Result.Error -> {
+                    _loginResult.value = AuthResult.Error(result.message)
+                    _errorMessage.value = result.message
+                }
+                else -> {}
+            }
             _isLoading.value = false
         }
     }
@@ -42,6 +64,8 @@ class AuthViewModel : ViewModel() {
     ) {
         viewModelScope.launch {
             _isLoading.value = true
+            _registerResult.value = AuthResult.Loading
+
             val request = RegistrationRequest(
                 login = login,
                 email = email,
@@ -52,19 +76,34 @@ class AuthViewModel : ViewModel() {
                 userSchool = userSchool,
                 role = role
             )
-            _registerResult.value = repository.register(request)
+
+            val result = repository.register(request)
+            when (result) {
+                is AuthRepository.Result.Success -> {
+                    _registerResult.value = AuthResult.Success(result.data)
+                }
+                is AuthRepository.Result.Error -> {
+                    _registerResult.value = AuthResult.Error(result.message)
+                    _errorMessage.value = result.message
+                }
+                else -> {}
+            }
             _isLoading.value = false
         }
     }
 
-    fun logout() {
-        repository.logout()
-        _loginResult.value = null
-        _registerResult.value = null
+    fun setError(message: String) {
+        _errorMessage.value = message
     }
 
     fun resetResults() {
         _loginResult.value = null
         _registerResult.value = null
+        _errorMessage.value = null
+    }
+
+    fun logout() {
+        repository.logout()
+        resetResults()
     }
 }

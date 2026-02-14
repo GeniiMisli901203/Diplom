@@ -1,31 +1,38 @@
 package com.example.ks1compose.Screens
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.ks1compose.DTOs.ScheduleDTO
+import com.example.ks1compose.PersonalUsefulElements.PersonalButton
+import com.example.ks1compose.PersonalUsefulElements.PersonalCard
+import com.example.ks1compose.PersonalUsefulElements.PersonalDropdown
+import com.example.ks1compose.PersonalUsefulElements.PersonalLoadingIndicator
+import com.example.ks1compose.PersonalUsefulElements.PersonalTextField
+import com.example.ks1compose.models.TokenManager
 import com.example.ks1compose.viewmodels.ScheduleViewModel
+import java.util.UUID
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddScheduleScreen(
+    scheduleViewModel: ScheduleViewModel,
     onNavigateBack: () -> Unit
 ) {
-    val daysList = listOf("пн", "вт", "ср", "чт", "пт", "сб")
-    val fullDaysMap = mapOf(
+    val daysList = listOf(
         "пн" to "Понедельник",
         "вт" to "Вторник",
         "ср" to "Среда",
@@ -33,175 +40,251 @@ fun AddScheduleScreen(
         "пт" to "Пятница",
         "сб" to "Суббота"
     )
-    val classList = listOf("5А", "5Б", "6А", "6Б", "7А", "7Б", "8А", "8Б", "9А", "9Б", "10А", "10Б", "11А", "11Б")
-    val context = LocalContext.current
-    val viewModel: ScheduleViewModel = viewModel()
-    val scheduleResponse by viewModel.scheduleResponse.collectAsState()
-    val errorMessage by viewModel.errorMessage.collectAsState()
 
-    var selectedDay by rememberSaveable { mutableStateOf("") }
-    var selectedClass by rememberSaveable { mutableStateOf("") }
-    var lessons by rememberSaveable { mutableStateOf(List(9) { "" }) }
-    var office by rememberSaveable { mutableStateOf(List(9) { "" }) }
+    val classList = listOf(
+        "5А", "5Б", "6А", "6Б", "7А", "7Б", "8А", "8Б",
+        "9А", "9Б", "10А", "10Б", "11А", "11Б"
+    )
 
-    LaunchedEffect(scheduleResponse) {
-        scheduleResponse?.let { response ->
-            if (response.success && response.message == "Расписание успешно добавлено") {
-                onNavigateBack()
-            }
+    var selectedClass by remember { mutableStateOf("") }
+    var selectedDay by remember { mutableStateOf("") }
+    var lessons by remember { mutableStateOf(List(9) { "" }) }
+    var offices by remember { mutableStateOf(List(9) { "" }) }
+
+    var classError by remember { mutableStateOf<String?>(null) }
+    var dayError by remember { mutableStateOf<String?>(null) }
+
+    val isLoading by scheduleViewModel.isLoading.collectAsStateWithLifecycle()
+    val operationResult by scheduleViewModel.operationResult.collectAsStateWithLifecycle()
+    val errorMessage by scheduleViewModel.errorMessage.collectAsStateWithLifecycle()
+
+    // Обработка результата добавления
+    LaunchedEffect(operationResult) {
+        if (operationResult != null) {
+            onNavigateBack()
+            scheduleViewModel.clearMessages()
         }
     }
 
-    LaunchedEffect(errorMessage) {
-        errorMessage?.let { message ->
-            // Показать Toast с ошибкой
-        }
-    }
-
-    LaunchedEffect(selectedClass, selectedDay) {
-        if (selectedClass.isNotBlank() && selectedDay.isNotBlank()) {
-            viewModel.getSchedule(selectedClass, selectedDay)
-        }
-    }
-
-    val currentScheduleResponse by viewModel.scheduleResponse.collectAsState()
-
-    LaunchedEffect(currentScheduleResponse) {
-        currentScheduleResponse?.let { response ->
-            if (response.success && response.schedules?.isNotEmpty() == true) {
-                val schedule = response.schedules?.first()
-                lessons = schedule?.lessons ?: List(9) { "" }
-                office = schedule?.office ?: List(9) { "" }
-            }
-        }
-    }
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
-            .verticalScroll(rememberScrollState())
-    ) {
-        var classExpanded by remember { mutableStateOf(false) }
-        var dayExpanded by remember { mutableStateOf(false) }
-
-        // Выбор класса
-        Box {
-            TextField(
-                value = selectedClass,
-                onValueChange = { selectedClass = it },
-                label = { Text("Выберите класс") },
-                modifier = Modifier.fillMaxWidth(),
-                readOnly = true,
-                trailingIcon = {
-                    Icon(
-                        Icons.Default.ArrowDropDown,
-                        contentDescription = null,
-                        modifier = Modifier.clickable { classExpanded = true }
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        "Добавить расписание",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold
                     )
-                }
+                },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(
+                            Icons.Default.ArrowBack,
+                            contentDescription = "Назад"
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                )
             )
-            DropdownMenu(
-                expanded = classExpanded,
-                onDismissRequest = { classExpanded = false },
-                modifier = Modifier.fillMaxWidth()
+        }
+    ) { paddingValues ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                classList.forEach { className ->
-                    DropdownMenuItem(
-                        text = { Text(className) },
-                        onClick = {
-                            selectedClass = className
-                            classExpanded = false
-                        }
+                // Информационная карточка
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f)
                     )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Выбор дня недели
-        Box {
-            TextField(
-                value = fullDaysMap[selectedDay] ?: "",
-                onValueChange = { selectedDay = it },
-                label = { Text("Выберите день недели") },
-                modifier = Modifier.fillMaxWidth(),
-                readOnly = true,
-                trailingIcon = {
-                    Icon(
-                        Icons.Default.ArrowDropDown,
-                        contentDescription = null,
-                        modifier = Modifier.clickable { dayExpanded = true }
-                    )
-                }
-            )
-            DropdownMenu(
-                expanded = dayExpanded,
-                onDismissRequest = { dayExpanded = false },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                daysList.forEach { day ->
-                    DropdownMenuItem(
-                        text = { Text(fullDaysMap[day] ?: "") },
-                        onClick = {
-                            selectedDay = day
-                            dayExpanded = false
-                        }
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Список уроков
-        Card(modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                for (i in 0 until 9) {
-                    LessonCard(
-                        lessonNumber = i + 1,
-                        lesson = lessons.getOrNull(i) ?: "",
-                        office = office.getOrNull(i) ?: "",
-                        onLessonChange = { newValue ->
-                            lessons = lessons.toMutableList().also { it[i] = newValue }
-                        },
-                        onOfficeChange = { newValue ->
-                            office = office.toMutableList().also { it[i] = newValue }
-                        }
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Кнопка добавления
-        Button(
-            onClick = {
-                if (selectedClass.isBlank() || selectedDay.isBlank()) {
-                    // Показать ошибку
-                    return@Button
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Info,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = "Заполните расписание для класса. Можно указать до 9 уроков.",
+                            fontSize = 14.sp,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            lineHeight = 20.sp
+                        )
+                    }
                 }
 
-                val schedule = ScheduleDTO(
-                    className = selectedClass,
-                    day = selectedDay,
-                    lessons = lessons,
-                    office = office
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // Выбор класса и дня
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surface
+                    ),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(20.dp)
+                    ) {
+                        Text(
+                            text = "Основная информация",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+
+                        Spacer(modifier = Modifier.height(20.dp))
+
+                        // Выбор класса
+                        PersonalDropdown(
+                            selectedValue = selectedClass,
+                            label = "Выберите класс",
+                            options = classList.map { it to it },
+                            onValueChange = {
+                                selectedClass = it
+                                classError = null
+                            },
+                            isError = classError != null,
+                            errorMessage = classError
+                        )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Выбор дня
+                        PersonalDropdown(
+                            selectedValue = selectedDay,
+                            label = "Выберите день недели",
+                            options = daysList,
+                            onValueChange = {
+                                selectedDay = it
+                                dayError = null
+                            },
+                            isError = dayError != null,
+                            errorMessage = dayError
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // Список уроков
+                Text(
+                    text = "Уроки",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .align(Alignment.Start)
+                        .padding(bottom = 8.dp)
                 )
 
-                viewModel.addSchedule(schedule)
-            },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Добавить расписание")
+                for (i in 0 until 9) {
+                    LessonInputCard(
+                        lessonNumber = i + 1,
+                        lesson = lessons[i],
+                        office = offices[i],
+                        onLessonChange = { newValue ->
+                            lessons = lessons.toMutableList().apply { this[i] = newValue }
+                        },
+                        onOfficeChange = { newValue ->
+                            offices = offices.toMutableList().apply { this[i] = newValue }
+                        }
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Кнопка добавления
+                PersonalButton(
+                    text = "Добавить расписание",
+                    onClick = {
+                        var isValid = true
+
+                        if (selectedClass.isBlank()) {
+                            classError = "Выберите класс"
+                            isValid = false
+                        }
+
+                        if (selectedDay.isBlank()) {
+                            dayError = "Выберите день недели"
+                            isValid = false
+                        }
+
+                        if (isValid) {
+                            val token = TokenManager.authToken
+                            if (token == null) {
+                                scheduleViewModel.setErrorMessage("Не авторизован")
+                                return@PersonalButton
+                            }
+
+                            val schedule = ScheduleDTO(
+                                scheduleId = UUID.randomUUID().toString(),
+                                className = selectedClass,
+                                day = selectedDay,
+                                lessons = lessons.map { if (it.isBlank()) "—" else it },
+                                office = offices.map { if (it.isBlank()) "—" else it }
+                            )
+
+                            scheduleViewModel.addSchedule("Bearer $token", schedule)
+                        }
+                    },
+                    widthFactor = 1f,
+                    isLoading = isLoading
+                )
+
+                // Сообщение об ошибке
+                if (errorMessage != null) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.errorContainer
+                    ) {
+                        Text(
+                            text = errorMessage!!,
+                            color = MaterialTheme.colorScheme.error,
+                            fontSize = 14.sp,
+                            modifier = Modifier.padding(12.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+            }
+
+            if (isLoading) {
+                PersonalLoadingIndicator()
+            }
         }
     }
 }
 
 @Composable
-fun LessonCard(
+fun LessonInputCard(
     lessonNumber: Int,
     lesson: String,
     office: String,
@@ -209,24 +292,65 @@ fun LessonCard(
     onOfficeChange: (String) -> Unit
 ) {
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 8.dp)
-            .clip(RoundedCornerShape(25.dp))
-            .background(Color.White)
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+        )
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            TextField(
-                value = lesson,
-                onValueChange = onLessonChange,
-                label = { Text("Урок $lessonNumber") },
-                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    modifier = Modifier.size(32.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(
+                            text = lessonNumber.toString(),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                Text(
+                    text = "Урок $lessonNumber",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Название урока
+            PersonalTextField(
+                text = lesson,
+                label = "Название урока",
+                padding = 0,
+                leadingIcon = Icons.Default.MenuBook,
+                onValueChange = onLessonChange
             )
-            TextField(
-                value = office,
-                onValueChange = onOfficeChange,
-                label = { Text("Кабинет") },
-                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Кабинет
+            PersonalTextField(
+                text = office,
+                label = "Кабинет",
+                padding = 0,
+                leadingIcon = Icons.Default.Room,
+                onValueChange = onOfficeChange
             )
         }
     }

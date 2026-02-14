@@ -1,41 +1,43 @@
 package com.example.ks1compose.viewmodels
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.ks1compose.DTOs.ScheduleDTO
 import com.example.ks1compose.DTOs.ScheduleResponse
-import com.example.ks1compose.models.RetrofitInstance
-import com.example.ks1compose.models.RetrofitInstanceWithAuth
+import com.example.ks1compose.repositories.ScheduleRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.io.IOException
 import java.net.URLEncoder
 
-class ScheduleViewModel : ViewModel() {
-    private val api = RetrofitInstance.apiService
-    private val apiWithAuth = RetrofitInstanceWithAuth.apiService
+class ScheduleViewModel(application: Application) : AndroidViewModel(application) {
+    private val repository = ScheduleRepository(application.applicationContext)
 
     private val _scheduleResponse = MutableStateFlow<ScheduleResponse?>(null)
-    val scheduleResponse: StateFlow<ScheduleResponse?> = _scheduleResponse
+    val scheduleResponse: StateFlow<ScheduleResponse?> = _scheduleResponse.asStateFlow()
 
     private val _allSchedules = MutableStateFlow<List<ScheduleDTO>>(emptyList())
-    val allSchedules: StateFlow<List<ScheduleDTO>> = _allSchedules
+    val allSchedules: StateFlow<List<ScheduleDTO>> = _allSchedules.asStateFlow()
 
     private val _isLoading = MutableStateFlow(false)
-    val isLoading: StateFlow<Boolean> = _isLoading
+    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
     private val _errorMessage = MutableStateFlow<String?>(null)
-    val errorMessage: StateFlow<String?> = _errorMessage
+    val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
     private val _operationResult = MutableStateFlow<String?>(null)
-    val operationResult: StateFlow<String?> = _operationResult
+    val operationResult: StateFlow<String?> = _operationResult.asStateFlow()
 
     fun loadAllSchedules() {
         viewModelScope.launch {
             _isLoading.value = true
+            _errorMessage.value = null
+
             try {
-                val response = api.getAllSchedules()
+                val response = repository.getAllSchedules()
                 if (response.isSuccessful) {
                     _allSchedules.value = response.body()?.schedules ?: emptyList()
                     _scheduleResponse.value = response.body()
@@ -56,11 +58,14 @@ class ScheduleViewModel : ViewModel() {
     fun addSchedule(token: String, schedule: ScheduleDTO) {
         viewModelScope.launch {
             _isLoading.value = true
+            _errorMessage.value = null
+            _operationResult.value = null
+
             try {
-                val response = apiWithAuth.addSchedule(token, schedule)
+                val response = repository.addSchedule(token, schedule)
                 if (response.isSuccessful) {
                     _operationResult.value = "Расписание успешно добавлено"
-                    loadAllSchedules() // Перезагружаем список
+                    loadAllSchedules()
                 } else {
                     _errorMessage.value = "Ошибка сервера: ${response.code()}"
                 }
@@ -77,10 +82,12 @@ class ScheduleViewModel : ViewModel() {
     fun getSchedule(className: String, day: String) {
         viewModelScope.launch {
             _isLoading.value = true
+            _errorMessage.value = null
+
             try {
                 val encodedClassName = URLEncoder.encode(className, "UTF-8")
                 val encodedDay = URLEncoder.encode(day, "UTF-8")
-                val response = api.getSchedule(encodedClassName, encodedDay)
+                val response = repository.getSchedule(encodedClassName, encodedDay)
 
                 if (response.isSuccessful) {
                     _allSchedules.value = response.body()?.schedules ?: emptyList()
@@ -102,9 +109,11 @@ class ScheduleViewModel : ViewModel() {
     fun getSchedulesByDay(day: String) {
         viewModelScope.launch {
             _isLoading.value = true
+            _errorMessage.value = null
+
             try {
                 val encodedDay = URLEncoder.encode(day, "UTF-8")
-                val response = api.getSchedulesByDay(encodedDay)
+                val response = repository.getSchedulesByDay(encodedDay)
 
                 if (response.isSuccessful) {
                     _allSchedules.value = response.body()?.schedules ?: emptyList()
@@ -126,11 +135,14 @@ class ScheduleViewModel : ViewModel() {
     fun deleteSchedule(token: String, scheduleId: String) {
         viewModelScope.launch {
             _isLoading.value = true
+            _errorMessage.value = null
+            _operationResult.value = null
+
             try {
-                val response = apiWithAuth.deleteSchedule(token, scheduleId)
+                val response = repository.deleteSchedule(token, scheduleId)
                 if (response.isSuccessful) {
                     _operationResult.value = "Расписание удалено"
-                    loadAllSchedules() // Перезагружаем список
+                    loadAllSchedules()
                 } else {
                     _errorMessage.value = "Ошибка сервера: ${response.code()}"
                 }
@@ -142,6 +154,10 @@ class ScheduleViewModel : ViewModel() {
                 _isLoading.value = false
             }
         }
+    }
+
+    fun setErrorMessage(message: String) {
+        _errorMessage.value = message
     }
 
     fun clearMessages() {

@@ -1,145 +1,380 @@
 package com.example.ks1compose.Screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.*
-import androidx.compose.material.TabRowDefaults.tabIndicatorOffset
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.unit.dp
-import com.google.accompanist.pager.ExperimentalPagerApi
-import com.google.accompanist.pager.HorizontalPager
-import com.google.accompanist.pager.rememberPagerState
-import kotlinx.coroutines.launch
-import android.util.Log
-import androidx.compose.foundation.border
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.ks1compose.DTOs.ScheduleDTO
+import com.example.ks1compose.PersonalUsefulElements.PersonalButton
+import com.example.ks1compose.PersonalUsefulElements.PersonalLoadingIndicator
+import com.example.ks1compose.models.TokenManager
 import com.example.ks1compose.viewmodels.ScheduleViewModel
-import com.example.ks1compose.ui.theme.DarkGrey
-import com.example.ks1compose.ui.theme.DarkPink
 
-@OptIn(ExperimentalPagerApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AdminScheduleScreen(
-    viewModel: ScheduleViewModel = viewModel()
+    scheduleViewModel: ScheduleViewModel
 ) {
-    val daysList = listOf("пн", "вт", "ср", "чт", "пт", "сб")
-    val coroutineScope = rememberCoroutineScope()
-    val pagerState = rememberPagerState()
+    val daysList = listOf(
+        "пн" to "Понедельник",
+        "вт" to "Вторник",
+        "ср" to "Среда",
+        "чт" to "Четверг",
+        "пт" to "Пятница",
+        "сб" to "Суббота"
+    )
 
-    var schedule by rememberSaveable { mutableStateOf(mapOf<String, Map<String, Map<String, List<String>>>>()) }
-    var isLoading by rememberSaveable { mutableStateOf(true) }
+    var selectedDay by remember { mutableStateOf(daysList[0].first) }
+    var showDeleteDialog by remember { mutableStateOf(false) }
+    var scheduleToDelete by remember { mutableStateOf<ScheduleDTO?>(null) }
 
-    // Получение данных расписания для всех классов по дню
-    LaunchedEffect(pagerState.currentPage) {
-        val currentDay = daysList[pagerState.currentPage]
-        viewModel.getSchedulesByDay(currentDay)
+    val allSchedules by scheduleViewModel.allSchedules.collectAsStateWithLifecycle()
+    val isLoading by scheduleViewModel.isLoading.collectAsStateWithLifecycle()
+    val errorMessage by scheduleViewModel.errorMessage.collectAsStateWithLifecycle()
+    val operationResult by scheduleViewModel.operationResult.collectAsStateWithLifecycle()
+
+    // Загружаем все расписания при старте
+    LaunchedEffect(Unit) {
+        scheduleViewModel.loadAllSchedules()
     }
 
-    // Наблюдение за изменениями в данных расписания
-    val scheduleResponse by viewModel.scheduleResponse.collectAsState()
-    val errorMessage by viewModel.errorMessage.collectAsState()
-
-    LaunchedEffect(scheduleResponse) {
-        scheduleResponse?.let { response ->
-            if (response.success) {
-                response.schedules?.let { schedules ->
-                    schedule = schedules.groupBy { it.day }.mapValues { (_, schedulesForDay) ->
-                        schedulesForDay.associate { scheduleDTO ->
-                            scheduleDTO.className to mapOf(
-                                "Lessons" to scheduleDTO.lessons,
-                                "Office" to scheduleDTO.office
-                            )
-                        }
-                    }
-                    isLoading = false
-                }
-            }
-        }
+    // Фильтруем расписания по выбранному дню
+    val filteredSchedules = remember(allSchedules, selectedDay) {
+        allSchedules.filter { it.day == selectedDay }
+            .sortedBy { it.className }
     }
 
-    Column(modifier = Modifier.fillMaxSize().padding(8.dp)) {
-        if (isLoading) {
-            CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally), color = DarkGrey)
-        } else {
-            TabRow(
-                selectedTabIndex = pagerState.currentPage,
-                indicator = { tabPositions ->
-                    TabRowDefaults.Indicator(
-                        Modifier.tabIndicatorOffset(tabPositions[pagerState.currentPage])
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        "Все расписания",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold
                     )
                 },
-                contentColor = DarkPink,
-                backgroundColor = MaterialTheme.colors.background,
-                modifier = Modifier.clip(RoundedCornerShape(25.dp))
-            ) {
-                daysList.forEachIndexed { index, day ->
-                    Tab(
-                        selected = pagerState.currentPage == index,
-                        onClick = {
-                            coroutineScope.launch { pagerState.animateScrollToPage(index) }
-                        },
-                        text = {
-                            Text(
-                                text = day,
-                                color = if (pagerState.currentPage == index) DarkPink else MaterialTheme.colors.onSurface
-                            )
-                        }
-                    )
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                ),
+                actions = {
+                    IconButton(onClick = { scheduleViewModel.loadAllSchedules() }) {
+                        Icon(
+                            Icons.Default.Refresh,
+                            contentDescription = "Обновить"
+                        )
+                    }
                 }
-            }
-
-            HorizontalPager(
-                state = pagerState,
-                count = daysList.size,
-                modifier = Modifier.fillMaxSize()
-            ) { page ->
-                val currentDay = daysList[page]
-                val daySchedule = schedule[currentDay] ?: mapOf()
-
-                Log.d("AdminScheduleScreen", "Day schedule for $currentDay: $daySchedule")
-
-                if (daySchedule.isEmpty()) {
-                    Box(
+            )
+        }
+    ) { paddingValues ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp)
+            ) {
+                // Выбор дня
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    )
+                ) {
+                    Column(
                         modifier = Modifier
-                            .fillMaxSize(),
-                        contentAlignment = Alignment.Center
+                            .fillMaxWidth()
+                            .padding(16.dp)
                     ) {
                         Text(
-                            text = "Нет расписания",
-                            color = MaterialTheme.colors.onSurface,
-                            style = MaterialTheme.typography.h5
+                            text = "Выберите день",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+
+                        // Горизонтальный скролл дней
+                        SingleChoiceDaySelector(
+                            days = daysList,
+                            selectedDay = selectedDay,
+                            onDaySelected = { selectedDay = it }
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Статистика
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = daysList.find { it.first == selectedDay }?.second ?: selectedDay,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = "Классов: ${filteredSchedules.size}",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+
+                if (isLoading && allSchedules.isEmpty()) {
+                    PersonalLoadingIndicator()
+                } else if (errorMessage != null && filteredSchedules.isEmpty()) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(32.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.errorContainer,
+                            modifier = Modifier.size(64.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    Icons.Default.Error,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(32.dp),
+                                    tint = MaterialTheme.colorScheme.error
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "Ошибка загрузки",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = errorMessage ?: "Неизвестная ошибка",
+                            fontSize = 14.sp,
+                            color = Color.Gray,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        PersonalButton(
+                            text = "Повторить",
+                            onClick = { scheduleViewModel.loadAllSchedules() },
+                            widthFactor = 0.5f
+                        )
+                    }
+                } else if (filteredSchedules.isEmpty()) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(32.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(50.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                            modifier = Modifier.size(80.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    Icons.Default.DateRange,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(40.dp),
+                                    tint = Color.Gray
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "Нет расписания на этот день",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = Color.Gray
+                        )
+                        Text(
+                            text = daysList.find { it.first == selectedDay }?.second ?: selectedDay,
+                            fontSize = 14.sp,
+                            color = Color.Gray.copy(alpha = 0.7f)
                         )
                     }
                 } else {
-                    val sortedClassSchedule = daySchedule.toList().sortedBy { (className, _) ->
-                        className.filter { it.isDigit() }.toIntOrNull() ?: 0
-                    }.toMap()
-
                     LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(16.dp)
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        items(sortedClassSchedule.size) { index ->
-                            val className = sortedClassSchedule.keys.elementAt(index)
-                            val classSchedule = sortedClassSchedule[className] ?: mapOf(
-                                "Lessons" to List(9) { "" },
-                                "Office" to List(9) { "" }
-                            )
-                            Log.d("AdminScheduleScreen", "Class schedule for $className: $classSchedule")
-                            ClassScheduleCard(
-                                className = className,
-                                lessons = classSchedule["Lessons"] ?: listOf(),
-                                offices = classSchedule["Office"] ?: listOf()
+                        items(filteredSchedules) { schedule ->
+                            AdminScheduleCard(
+                                schedule = schedule,
+                                onDelete = {
+                                    scheduleToDelete = schedule
+                                    showDeleteDialog = true
+                                }
                             )
                         }
+                    }
+                }
+            }
+
+            if (isLoading && allSchedules.isNotEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 16.dp)
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(32.dp),
+                        strokeWidth = 3.dp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+        }
+    }
+
+    // Диалог подтверждения удаления
+    if (showDeleteDialog && scheduleToDelete != null) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = {
+                Text(
+                    text = "Удалить расписание",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column {
+                    Text(
+                        text = "Вы уверены, что хотите удалить расписание?",
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp)
+                        ) {
+                            Text(
+                                text = "Класс: ${scheduleToDelete!!.className}",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                text = "День: ${scheduleToDelete!!.day}",
+                                fontSize = 13.sp
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val token = TokenManager.authToken
+                        if (token != null) {
+                            scheduleViewModel.deleteSchedule("Bearer $token", scheduleToDelete!!.scheduleId)
+                        }
+                        showDeleteDialog = false
+                    }
+                ) {
+                    Text(
+                        text = "Удалить",
+                        color = Color.Red
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) {
+                    Text("Отмена")
+                }
+            }
+        )
+    }
+}
+
+@Composable
+fun SingleChoiceDaySelector(
+    days: List<Pair<String, String>>,
+    selectedDay: String,
+    onDaySelected: (String) -> Unit
+) {
+    LazyRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        items(days.size) { index ->
+            val day = days[index]
+            val isSelected = day.first == selectedDay
+
+            Surface(
+                modifier = Modifier
+                    .width(70.dp)
+                    .height(48.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable { onDaySelected(day.first) },
+                color = if (isSelected)
+                    MaterialTheme.colorScheme.primary
+                else
+                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                contentColor = if (isSelected)
+                    Color.White
+                else
+                    MaterialTheme.colorScheme.onSurfaceVariant
+            ) {
+                Box(
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = day.first,
+                            fontSize = 16.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                        )
                     }
                 }
             }
@@ -148,39 +383,139 @@ fun AdminScheduleScreen(
 }
 
 @Composable
-fun ClassScheduleCard(className: String, lessons: List<String>, offices: List<String>) {
+fun AdminScheduleCard(
+    schedule: ScheduleDTO,
+    onDelete: () -> Unit
+) {
     Card(
-        backgroundColor = MaterialTheme.colors.surface.copy(alpha = 0.8f),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp, horizontal = 4.dp)
-            .clip(RoundedCornerShape(25.dp))
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Column(modifier = Modifier
-            .border(3.dp, MaterialTheme.colors.onSurface.copy(alpha = 0.12f), RoundedCornerShape(25.dp))
-            .padding(16.dp)) {
-            Text(
-                text = "Класс: $className",
-                fontWeight = FontWeight.Bold,
-                fontSize = 20.sp,
-                color = MaterialTheme.colors.onSurface
-            )
-            Spacer(modifier = Modifier.height(5.dp))
-            Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colors.onSurface))
-            Spacer(modifier = Modifier.height(5.dp))
-            lessons.forEachIndexed { index, lesson ->
-                val office = offices.getOrNull(index) ?: "Нет кабинета"
-                Text(
-                    text = "Урок ${index + 1}: $lesson",
-                    color = MaterialTheme.colors.onSurface
-                )
-                Text(
-                    text = "Кабинет: $office",
-                    color = MaterialTheme.colors.onSurface
-                )
-                Spacer(modifier = Modifier.height(5.dp))
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            // Заголовок с классом и кнопкой удаления
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(
+                                text = schedule.className,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.width(12.dp))
+
+                    Text(
+                        text = "${schedule.day}",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+
+                IconButton(onClick = onDelete) {
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = "Удалить",
+                        tint = Color.Red.copy(alpha = 0.8f)
+                    )
+                }
             }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Divider(color = Color.Gray.copy(alpha = 0.2f))
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Список уроков
+            for (i in schedule.lessons.indices) {
+                if (schedule.lessons[i] != "—" && schedule.lessons[i].isNotBlank()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            modifier = Modifier.size(24.dp),
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(
+                                    text = (i + 1).toString(),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.width(12.dp))
+
+                        Column(
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                text = schedule.lessons[i],
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "Каб. ${schedule.office.getOrNull(i) ?: "—"}",
+                                fontSize = 12.sp,
+                                color = Color.Gray
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (schedule.lessons.all { it == "—" || it.isBlank() }) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = "Нет уроков",
+                        fontSize = 13.sp,
+                        color = Color.Gray,
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
+                }
+            }
+
+            // Информация о ID (для отладки)
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "ID: ${schedule.scheduleId.take(8)}...",
+                fontSize = 10.sp,
+                color = Color.Gray.copy(alpha = 0.5f),
+                modifier = Modifier.align(Alignment.End)
+            )
         }
     }
 }
-

@@ -1,214 +1,411 @@
 package com.example.ks1compose.Screens
 
 import android.content.Context
-import android.util.Log
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.IconButton
-import androidx.compose.material.MaterialTheme
-import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.ks1compose.DTOs.NewsDTO
+import com.example.ks1compose.PersonalUsefulElements.PersonalButton
+import com.example.ks1compose.PersonalUsefulElements.PersonalLoadingIndicator
+import com.example.ks1compose.PersonalUsefulElements.PersonalTextField
 import com.example.ks1compose.viewmodels.NewsViewModel
-import com.example.ks1compose.ui.theme.DarkPink
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SearchScreen(
-    viewModel: NewsViewModel = viewModel(),
+    newsViewModel: NewsViewModel,
     onNavigateBack: () -> Unit,
     currentUserId: String
 ) {
-    var searchQuery by rememberSaveable { mutableStateOf("") }
-    var searchHistory by rememberSaveable { mutableStateOf(listOf<String>()) }
-    var searchResults by rememberSaveable { mutableStateOf<List<IdeaWithState>>(emptyList()) }
-    var isSearching by rememberSaveable { mutableStateOf(false) }
-    var showHistory by rememberSaveable { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+    var searchResults by remember { mutableStateOf<List<NewsDTO>>(emptyList()) }
+    var searchHistory by remember { mutableStateOf<List<String>>(emptyList()) }
+    var showHistory by remember { mutableStateOf(false) }
+    var isSearching by remember { mutableStateOf(false) }
+
     val context = LocalContext.current
     val keyboardController = LocalSoftwareKeyboardController.current
-    val sharedPreferences = context.getSharedPreferences("SearchHistory", Context.MODE_PRIVATE)
 
-    // Загрузка истории поиска из SharedPreferences
-    LaunchedEffect(Unit) {
-        val history = sharedPreferences.getString("history", "")?.split(",")?.filter { it.isNotEmpty() } ?: emptyList()
-        searchHistory = history
+    val sharedPreferences = context.getSharedPreferences("search_prefs", Context.MODE_PRIVATE)
+    val allNews by newsViewModel.allNews.collectAsState()
+    val isLoading by newsViewModel.isLoading.collectAsState()
+
+    // Загрузка истории поиска - функция определена внутри
+    fun loadSearchHistory() {
+        val history = sharedPreferences.getString("search_history", "")
+            ?.split(",")
+            ?.filter { it.isNotEmpty() }
+            ?: emptyList()
+        searchHistory = history.take(10)
     }
 
-    // Наблюдение за изменениями в данных новостей
-    val newsResponse by viewModel.newsResponse.collectAsState()
-    val errorMessage by viewModel.errorMessage.collectAsState()
+    // Сохранение запроса в историю
+    fun saveSearchQuery(query: String) {
+        val updatedHistory = listOf(query) + searchHistory.filter { it != query }
+        val historyToSave = updatedHistory.take(10).joinToString(",")
+        sharedPreferences.edit().putString("search_history", historyToSave).apply()
+        searchHistory = updatedHistory.take(10)
+    }
 
-    LaunchedEffect(newsResponse) {
-        newsResponse?.let { response ->
-            if (response.success) {
-                searchResults = response.newsList?.map { newsItem ->
-                    IdeaWithState(
-                        userId = newsItem.userId,
-                        title = newsItem.title,
-                        description = newsItem.description,
-                        url = newsItem.url ?: ""
-                    )
-                } ?: emptyList()
-                isSearching = false
-                showHistory = false
-            } else {
-                Log.d("Ошибка запроса", "Ошибка при запросе")
+    // Выполнение поиска
+    fun performSearch(query: String) {
+        if (query.isNotBlank()) {
+            isSearching = true
+            keyboardController?.hide()
+            saveSearchQuery(query)
+
+            // Фильтрация новостей по запросу
+            val results = allNews.filter { news ->
+                news.title.contains(query, ignoreCase = true) ||
+                        news.description.contains(query, ignoreCase = true)
             }
+            searchResults = results
+            isSearching = false
+            showHistory = false
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth()
+    // Очистка поиска
+    fun clearSearch() {
+        searchQuery = ""
+        searchResults = emptyList()
+        showHistory = true
+        keyboardController?.hide()
+    }
+
+    // Загружаем историю при старте
+    LaunchedEffect(Unit) {
+        loadSearchHistory()
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        "Поиск новостей",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(
+                            Icons.Default.ArrowBack,
+                            contentDescription = "Назад"
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            )
+        }
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .padding(16.dp)
         ) {
-            OutlinedTextField(
-                value = searchQuery,
+            // Поле поиска
+            PersonalTextField(
+                text = searchQuery,
+                label = "Введите запрос...",
+                padding = 0,
+                leadingIcon = Icons.Default.Search,
+                trailingIcon = if (searchQuery.isNotEmpty()) Icons.Default.Clear else null,
+                onTrailingIconClick = { clearSearch() },
                 onValueChange = {
                     searchQuery = it
                     if (it.isEmpty()) {
+                        searchResults = emptyList()
                         showHistory = true
                     }
                 },
-                label = { Text("Поиск новостей") },
-                modifier = Modifier
-                    .weight(1f)
-                    .clickable { showHistory = true },
-                trailingIcon = {
-                    if (searchQuery.isNotEmpty()) {
-                        IconButton(onClick = {
-                            searchQuery = ""
-                            keyboardController?.hide()
-                            showHistory = true
-                        }) {
-                            Icon(Icons.Default.Clear, contentDescription = "Очистить")
-                        }
-                    }
+                onKeyboardDone = {
+                    performSearch(searchQuery)
                 }
             )
-            IconButton(onClick = { onNavigateBack() }) {
-                Icon(Icons.Default.ArrowBack, contentDescription = "Назад")
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Кнопка поиска
+            PersonalButton(
+                text = "Найти",
+                onClick = { performSearch(searchQuery) },
+                widthFactor = 1f,
+                isLoading = isSearching
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Контент
+            if (isLoading && searchResults.isEmpty()) {
+                PersonalLoadingIndicator()
+            } else {
+                when {
+                    showHistory && searchHistory.isNotEmpty() -> {
+                        HistorySection(
+                            searchHistory = searchHistory,
+                            onHistoryItemClick = { query ->
+                                searchQuery = query
+                                performSearch(query)
+                            },
+                            onClearHistory = {
+                                sharedPreferences.edit().remove("search_history").apply()
+                                searchHistory = emptyList()
+                            }
+                        )
+                    }
+                    searchResults.isNotEmpty() -> {
+                        SearchResultsSection(
+                            results = searchResults,
+                            currentUserId = currentUserId
+                        )
+                    }
+                    searchQuery.isNotEmpty() && !isSearching && !showHistory -> {
+                        EmptyResultsSection()
+                    }
+                }
             }
         }
+    }
+}
 
-        if (showHistory && searchHistory.isNotEmpty()) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(MaterialTheme.colors.surface)
-                    .border(1.dp, MaterialTheme.colors.onSurface.copy(alpha = 0.12f), RoundedCornerShape(8.dp))
+@Composable
+fun HistorySection(
+    searchHistory: List<String>,
+    onHistoryItemClick: (String) -> Unit,
+    onClearHistory: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.Menu,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "История поиска",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+
+                TextButton(onClick = onClearHistory) {
+                    Text(
+                        text = "Очистить",
+                        color = Color.Red.copy(alpha = 0.8f),
+                        fontSize = 12.sp
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            searchHistory.forEachIndexed { index, query ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onHistoryItemClick(query) }
+                        .padding(vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = query,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 14.sp,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Icon(
+                        Icons.Default.Search,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                    )
+                }
+                if (index < searchHistory.size - 1) {
+                    Divider()
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SearchResultsSection(
+    results: List<NewsDTO>,
+    currentUserId: String
+) {
+    Column {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Результаты поиска",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.primaryContainer,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
             ) {
                 Text(
-                    "История поиска:",
-                    style = MaterialTheme.typography.subtitle1,
-                    modifier = Modifier.padding(8.dp)
+                    text = "Найдено: ${results.size}",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                 )
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 200.dp)
-                ) {
-                    items(searchHistory.distinct()) { historyItem ->  // Убираем дубликаты для отображения
-                        Text(
-                            text = historyItem,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    searchQuery = historyItem
-                                    viewModel.searchNews(historyItem)
-                                    showHistory = false
-                                }
-                                .padding(12.dp)
-                        )
-                    }
-                }
             }
         }
 
-        Button(
-            onClick = {
-                if (searchQuery.isNotEmpty()) {
-                    isSearching = true
-                    viewModel.searchNews(searchQuery)
-
-                    // Обновляем историю поиска
-                    val updatedHistory = listOf(searchQuery) + searchHistory.filter { it != searchQuery }
-                    searchHistory = updatedHistory.take(10)  // Ограничиваем историю 10 элементами
-
-                    // Сохраняем историю в SharedPreferences
-                    sharedPreferences.edit()
-                        .putString("history", searchHistory.joinToString(","))
-                        .apply()
-
-                    showHistory = false
-                }
-            },
-            modifier = Modifier.align(Alignment.End)
+        LazyColumn(
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text("Поиск")
-        }
-
-        if (isSearching) {
-            CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
-        } else {
-            if (searchResults.isEmpty() && searchQuery.isNotEmpty() && !isSearching) {
-                Text(
-                    text = "Ничего не найдено",
-                    modifier = Modifier
-                        .padding(32.dp)
-                        .fillMaxWidth()
-                        .align(Alignment.CenterHorizontally),
-                    color = DarkPink
+            items(results) { news ->
+                NewsSearchCard(
+                    news = news,
+                    currentUserId = currentUserId
                 )
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+            }
+        }
+    }
+}
+
+@Composable
+fun EmptyResultsSection() {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Surface(
+            shape = RoundedCornerShape(50.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+            modifier = Modifier.size(80.dp)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    Icons.Default.Search,
+                    contentDescription = null,
+                    modifier = Modifier.size(40.dp),
+                    tint = Color.Gray
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = "Ничего не найдено",
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Medium,
+            color = Color.Gray
+        )
+        Text(
+            text = "Попробуйте изменить запрос",
+            fontSize = 14.sp,
+            color = Color.Gray.copy(alpha = 0.7f)
+        )
+    }
+}
+
+@Composable
+fun NewsSearchCard(
+    news: NewsDTO,
+    currentUserId: String
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { /* Открыть детали новости */ },
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Text(
+                text = news.title,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+                maxLines = 2,
+                lineHeight = 20.sp
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = news.description,
+                fontSize = 14.sp,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 3,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+            )
+            if (!news.url.isNullOrEmpty()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                    modifier = Modifier.padding(top = 4.dp)
                 ) {
-                    items(searchResults) { item ->
-                        IdeaCard(
-                            idea = item,
-                            currentUserId = currentUserId,
-                            onDelete = { /* Пустая функция, так как удаление не требуется */ }
-                        )
-                    }
+                    Text(
+                        text = news.url,
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        maxLines = 1
+                    )
                 }
             }
         }

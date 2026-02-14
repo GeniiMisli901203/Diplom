@@ -1,154 +1,299 @@
 package com.example.ks1compose.Screens
 
-import UserRepository
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material.CircularProgressIndicator
-import androidx.compose.material.MaterialTheme
-import androidx.compose.material.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.School
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.ks1compose.PersonalUsefulElements.PersonalButton
+import com.example.ks1compose.PersonalUsefulElements.PersonalLoadingIndicator
 import com.example.ks1compose.PersonalUsefulElements.PersonalTextField
 import com.example.ks1compose.viewmodels.UserViewModel
-import com.example.ks1compose.ui.theme.LightGrey
-import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditProfileScreen(
+    userViewModel: UserViewModel,
     onProfileUpdated: () -> Unit,
     userLogin: String
 ) {
-    val userRepository = remember { UserRepository() }
-    val userViewModel: UserViewModel = viewModel()
+    val userInfo by userViewModel.userInfo.collectAsStateWithLifecycle()
+    val isLoading by userViewModel.isLoading.collectAsStateWithLifecycle()
+    val updateResult by userViewModel.updateResult.collectAsStateWithLifecycle()
+    val error by userViewModel.error.collectAsStateWithLifecycle()
 
-    var userName by rememberSaveable { mutableStateOf("") }
-    var userSName by rememberSaveable { mutableStateOf("") }
-    var userClass by rememberSaveable { mutableStateOf("") }
-    var userSchool by rememberSaveable { mutableStateOf("") }
-    var isLoading by rememberSaveable { mutableStateOf(true) }
-    var isUpdating by rememberSaveable { mutableStateOf(false) }
-    var errorMessage by rememberSaveable { mutableStateOf<String?>(null) }
-    val coroutineScope = rememberCoroutineScope()
+    var userName by remember { mutableStateOf("") }
+    var userSName by remember { mutableStateOf("") }
+    var userClass by remember { mutableStateOf("") }
+    var userSchool by remember { mutableStateOf("") }
 
-    LaunchedEffect(userLogin) {
-        try {
-            isLoading = true
-            val userInfo = userRepository.getUserInfo(userLogin)
+    var nameError by remember { mutableStateOf<String?>(null) }
+    var sNameError by remember { mutableStateOf<String?>(null) }
+    var classError by remember { mutableStateOf<String?>(null) }
+    var schoolError by remember { mutableStateOf<String?>(null) }
 
-            if (userInfo.success && userInfo.user != null) {
-                userName = userInfo.user.name
-                userSName = userInfo.user.sName
-                userClass = userInfo.user.uClass
-                userSchool = userInfo.user.school
-            } else {
-                errorMessage = userInfo.message ?: "Не удалось загрузить данные пользователя"
-            }
-        } catch (e: Exception) {
-            errorMessage = "Ошибка загрузки: ${e.message}"
-        } finally {
-            isLoading = false
+    // Загружаем текущие данные пользователя
+    LaunchedEffect(userInfo) {
+        if (userInfo != null) {
+            userName = userInfo?.name ?: ""
+            userSName = userInfo?.sName ?: ""
+            userClass = userInfo?.uClass ?: ""
+            userSchool = userInfo?.school ?: ""
         }
     }
 
-    Column(
-        modifier = Modifier
-            .padding(16.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        if (isLoading) {
-            CircularProgressIndicator(color = LightGrey)
-        } else {
-            errorMessage?.let {
-                Text(text = it, color = MaterialTheme.colors.error)
-                Spacer(modifier = Modifier.height(16.dp))
+    // Обработка результата обновления
+    LaunchedEffect(updateResult) {
+        when (updateResult) {
+            is UserViewModel.UpdateResult.Success -> {
+                onProfileUpdated()
+                userViewModel.clearUpdateResult()
             }
+            else -> {}
+        }
+    }
 
-            PersonalTextField(
-                maxLines = 1,
-                singleLine = true,
-                userName,
-                label = "Имя",
-                padding = 8,
-                onValueChange = { userName = it }
+    // Загружаем информацию о пользователе при первом входе
+    LaunchedEffect(Unit) {
+        userViewModel.loadUserInfo()
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        "Редактировать профиль",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                ),
+                navigationIcon = {
+                    IconButton(onClick = { onProfileUpdated() }) {
+                        Icon(
+                            Icons.Default.ArrowBack,
+                            contentDescription = "Назад"
+                        )
+                    }
+                }
             )
-            Spacer(modifier = Modifier.height(16.dp))
-
-            PersonalTextField(
-                maxLines = 1,
-                singleLine = true,
-                userSName,
-                label = "Фамилия",
-                padding = 8,
-                onValueChange = { userSName = it }
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-
-            PersonalTextField(
-                maxLines = 1,
-                singleLine = true,
-                userClass,
-                label = "Класс",
-                padding = 8,
-                onValueChange = { userClass = it }
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-
-            PersonalTextField(
-                maxLines = 1,
-                singleLine = true,
-                userSchool,
-                label = "Школа",
-                padding = 8,
-                onValueChange = { userSchool = it }
-            )
-            Spacer(modifier = Modifier.height(24.dp))
-
-            if (isUpdating) {
-                CircularProgressIndicator(color = LightGrey)
+        }
+    ) { paddingValues ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+        ) {
+            if (isLoading && userInfo == null) {
+                PersonalLoadingIndicator()
             } else {
-                PersonalButton(text = "Сохранить изменения") {
-                    if (userName.isBlank() || userSName.isBlank() ||  userClass.isBlank()) {
-                        errorMessage = "Имя, фамилия и класс обязательны для заполнения"
-                        return@PersonalButton
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    // Аватар
+                    Surface(
+                        modifier = Modifier.size(100.dp),
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.primaryContainer
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                Icons.Default.Person,
+                                contentDescription = null,
+                                modifier = Modifier.size(50.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
                     }
 
-                    coroutineScope.launch {
-                        try {
-                            isUpdating = true
-                            errorMessage = null
+                    Spacer(modifier = Modifier.height(24.dp))
 
-                            val response = userViewModel.updateUserInfo(
-                                login = userLogin,
-                                name = userName,
-                                sName = userSName,
-                                uClass = userClass,
-                                school = userSchool
+                    // Форма редактирования
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(24.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surface
+                        ),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(20.dp)
+                        ) {
+                            Text(
+                                text = "Основная информация",
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
                             )
 
-                            if (response.success) {
-                                onProfileUpdated()
-                            } else {
-                                errorMessage = response.message ?: "Не удалось обновить данные"
+                            Spacer(modifier = Modifier.height(20.dp))
+
+                            // Имя
+                            PersonalTextField(
+                                text = userName,
+                                label = "Имя",
+                                padding = 0,
+                                isError = nameError != null,
+                                errorMessage = nameError,
+                                leadingIcon = Icons.Default.Person,
+                                onValueChange = {
+                                    userName = it
+                                    nameError = null
+                                }
+                            )
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            // Фамилия
+                            PersonalTextField(
+                                text = userSName,
+                                label = "Фамилия",
+                                padding = 0,
+                                isError = sNameError != null,
+                                errorMessage = sNameError,
+                                leadingIcon = Icons.Default.Person,
+                                onValueChange = {
+                                    userSName = it
+                                    sNameError = null
+                                }
+                            )
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            // Класс (только для учеников)
+                            if (userInfo?.role == "student") {
+                                PersonalTextField(
+                                    text = userClass,
+                                    label = "Класс",
+                                    padding = 0,
+                                    isError = classError != null,
+                                    errorMessage = classError,
+                                    leadingIcon = Icons.Default.School,
+                                    onValueChange = {
+                                        userClass = it
+                                        classError = null
+                                    }
+                                )
+
+                                Spacer(modifier = Modifier.height(12.dp))
                             }
-                        } catch (e: Exception) {
-                            errorMessage = "Ошибка: ${e.message}"
-                        } finally {
-                            isUpdating = false
+
+                            // Школа
+                            PersonalTextField(
+                                text = userSchool,
+                                label = "Школа",
+                                padding = 0,
+                                isError = schoolError != null,
+                                errorMessage = schoolError,
+                                leadingIcon = Icons.Default.School,
+                                onValueChange = {
+                                    userSchool = it
+                                    schoolError = null
+                                }
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    // Кнопка сохранения
+                    PersonalButton(
+                        text = "Сохранить изменения",
+                        onClick = {
+                            var isValid = true
+
+                            if (userName.isBlank()) {
+                                nameError = "Введите имя"
+                                isValid = false
+                            }
+
+                            if (userSName.isBlank()) {
+                                sNameError = "Введите фамилию"
+                                isValid = false
+                            }
+
+                            if (userInfo?.role == "student" && userClass.isBlank()) {
+                                classError = "Введите класс"
+                                isValid = false
+                            }
+
+                            if (userSchool.isBlank()) {
+                                schoolError = "Введите школу"
+                                isValid = false
+                            }
+
+                            if (isValid) {
+                                userViewModel.updateUserInfo(
+                                    name = userName,
+                                    sName = userSName,
+                                    uClass = userClass,
+                                    school = userSchool
+                                )
+                            }
+                        },
+                        widthFactor = 1f,
+                        isLoading = isLoading && updateResult is UserViewModel.UpdateResult.Loading
+                    )
+
+                    // Сообщение об ошибке
+                    if (error != null && updateResult is UserViewModel.UpdateResult.Error) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.errorContainer
+                        ) {
+                            Text(
+                                text = error!!,
+                                color = MaterialTheme.colorScheme.error,
+                                fontSize = 14.sp,
+                                modifier = Modifier.padding(12.dp)
+                            )
+                        }
+                    }
+
+                    // Сообщение об успехе
+                    if (updateResult is UserViewModel.UpdateResult.Success) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer
+                        ) {
+                            Text(
+                                text = "Профиль успешно обновлен!",
+                                color = MaterialTheme.colorScheme.primary,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.padding(12.dp)
+                            )
                         }
                     }
                 }

@@ -1,78 +1,251 @@
 package com.example.ks1compose.Screens
 
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.Title
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
-import com.example.ks1compose.PersonalUsefulElements.PersonalTextField
-import com.example.ks1compose.PersonalUsefulElements.PersonalButton
-import com.example.ks1compose.models.RetrofitInstance
-import kotlinx.coroutines.launch
-import android.util.Log
-import androidx.compose.material3.Text
 import androidx.compose.ui.graphics.Color
-import com.example.ks1compose.DTOs.NewsDTO
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.ks1compose.PersonalUsefulElements.PersonalButton
+import com.example.ks1compose.PersonalUsefulElements.PersonalLoadingIndicator
+import com.example.ks1compose.PersonalUsefulElements.PersonalTextField
+import com.example.ks1compose.models.TokenManager
+import com.example.ks1compose.viewmodels.NewsViewModel
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddIdeaScreen(
+    newsViewModel: NewsViewModel,
     onIdeaAdded: () -> Unit,
     token: String
 ) {
     var title by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
-    var link by remember { mutableStateOf("") }
-    var errorMessage by remember { mutableStateOf("") }
-    val coroutineScope = rememberCoroutineScope()
+    var url by remember { mutableStateOf("") }
 
-    Column(
-        modifier = Modifier.fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        PersonalTextField(2, false, title, "Заголовок", 15) { title = it }
-        Spacer(modifier = Modifier.height(10.dp))
-        PersonalTextField(5, false, description, "Описание", 15) { description = it }
-        Spacer(modifier = Modifier.height(10.dp))
-        PersonalTextField(5, false, link, "Ссылка", 15) { link = it }
-        Spacer(modifier = Modifier.height(10.dp))
+    var titleError by remember { mutableStateOf<String?>(null) }
+    var descriptionError by remember { mutableStateOf<String?>(null) }
 
-        PersonalButton("Отправить") {
-            if (title.isNotBlank() && description.isNotBlank() && link.isNotBlank()) {
-                coroutineScope.launch {
-                    val news = NewsDTO(
-                        userId = token, // Используем токен в качестве userId
-                        title = title,
-                        description = description,
-                        url = link
+    val isLoading by newsViewModel.isLoading.collectAsStateWithLifecycle()
+    val addNewsResult by newsViewModel.addNewsResult.collectAsStateWithLifecycle()
+    val errorMessage by newsViewModel.errorMessage.collectAsStateWithLifecycle()
+
+    // Обработка результата добавления
+    LaunchedEffect(addNewsResult) {
+        if (addNewsResult != null) {
+            onIdeaAdded()
+            newsViewModel.clearResults()
+        }
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        "Добавить новость",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold
                     )
-                    try {
-                        val response = RetrofitInstance.apiService.addNews(news)
+                },
+                navigationIcon = {
+                    IconButton(onClick = onIdeaAdded) {
+                        Icon(
+                            Icons.Default.ArrowBack,
+                            contentDescription = "Назад"
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            )
+        }
+    ) { paddingValues ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // Заголовок
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surface
+                    ),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(20.dp)
+                    ) {
+                        Text(
+                            text = "Новая новость",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
 
-                        // Check if the response is successful based on your API structure
-                        if (response.isSuccessful) { // Adjust according to your response structure
-                            Log.d("AddIdeaScreen", "News added successfully")
-                            onIdeaAdded()
-                        } else {
-                            val apiError = response.errorBody()?.string() ?: "Unknown error"
-                            Log.e("AddIdeaScreen", "Failed to add news: $apiError")
-                            errorMessage = "Failed to add idea: $apiError" // Update with user-friendly error
-                        }
-                    } catch (e: Exception) {
-                        Log.e("AddIdeaScreen", "Error adding news: ${e.message}", e)
-                        errorMessage = "Error adding idea: ${e.message}"
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Text(
+                            text = "Заполните информацию о новости",
+                            fontSize = 14.sp,
+                            color = Color.Gray
+                        )
+
+                        Spacer(modifier = Modifier.height(20.dp))
+
+                        // Заголовок
+                        PersonalTextField(
+                            text = title,
+                            label = "Заголовок",
+                            padding = 0,
+                            isError = titleError != null,
+                            errorMessage = titleError,
+                            leadingIcon = Icons.Default.Title,
+                            maxLines = 2,
+                            onValueChange = {
+                                title = it
+                                titleError = null
+                            }
+                        )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Описание
+                        PersonalTextField(
+                            text = description,
+                            label = "Описание",
+                            padding = 0,
+                            isError = descriptionError != null,
+                            errorMessage = descriptionError,
+                            leadingIcon = Icons.Default.Description,
+                            maxLines = 5,
+                            singleLine = false,
+                            onValueChange = {
+                                description = it
+                                descriptionError = null
+                            }
+                        )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Ссылка (опционально)
+                        PersonalTextField(
+                            text = url,
+                            label = "Ссылка (необязательно)",
+                            padding = 0,
+                            leadingIcon = Icons.Default.Link,
+                            onValueChange = { url = it }
+                        )
                     }
                 }
-            } else {
-                errorMessage = "All fields are required!"
-            }
-        }
 
-        // Display error message if exists
-        if (errorMessage.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(10.dp))
-            Text(text = errorMessage, color = Color.Red)
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Кнопка публикации
+                PersonalButton(
+                    text = "Опубликовать",
+                    onClick = {
+                        var isValid = true
+
+                        if (title.isBlank()) {
+                            titleError = "Введите заголовок"
+                            isValid = false
+                        }
+
+                        if (description.isBlank()) {
+                            descriptionError = "Введите описание"
+                            isValid = false
+                        }
+
+                        if (isValid) {
+                            newsViewModel.addNews(
+                                token = token,
+                                title = title,
+                                description = description,
+                                url = url.takeIf { it.isNotBlank() }
+                            )
+                        }
+                    },
+                    widthFactor = 1f,
+                    isLoading = isLoading
+                )
+
+                // Сообщение об ошибке
+                if (errorMessage != null) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.errorContainer
+                    ) {
+                        Text(
+                            text = errorMessage!!,
+                            color = MaterialTheme.colorScheme.error,
+                            fontSize = 14.sp,
+                            modifier = Modifier.padding(12.dp)
+                        )
+                    }
+                }
+
+                // Информация о пользователе
+                Spacer(modifier = Modifier.height(16.dp))
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Person,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = Color.Gray
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Публикуется от имени: ${TokenManager.userName ?: "Пользователь"}",
+                            fontSize = 12.sp,
+                            color = Color.Gray
+                        )
+                    }
+                }
+            }
+
+            if (isLoading) {
+                PersonalLoadingIndicator()
+            }
         }
     }
 }
