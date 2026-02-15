@@ -32,7 +32,8 @@ fun DashboardScreen(
     newsViewModel: NewsViewModel,
     onNavigateToSchedule: () -> Unit,
     onNavigateToGrades: () -> Unit,
-    onNavigateToNews: () -> Unit
+    onNavigateToNews: () -> Unit,
+    onNavigateToAdmin: () -> Unit
 ) {
     val userInfo by userViewModel.userInfo.collectAsStateWithLifecycle()
     val isLoading by userViewModel.isLoading.collectAsStateWithLifecycle()
@@ -84,9 +85,22 @@ fun DashboardScreen(
                         )
                     }
 
-                    // Статистика (заглушка)
+                    // Статистика
                     item {
                         StatisticsCard()
+                    }
+
+                    // Для администратора добавим дополнительную карточку
+                    if (userInfo?.role == "admin") {
+                        item {
+                            QuickActionsCard(
+                                onNavigateToSchedule = onNavigateToSchedule,
+                                onNavigateToGrades = onNavigateToGrades,
+                                onNavigateToNews = onNavigateToNews,
+                                onNavigateToAdmin = onNavigateToAdmin,
+                                isAdmin = userInfo?.role == "admin"
+                            )
+                        }
                     }
 
                     item {
@@ -98,6 +112,73 @@ fun DashboardScreen(
     }
 }
 
+// com.example.ks1compose.Screens.DashboardScreen.kt
+// Исправленная функция QuickActionsCard
+
+@Composable
+fun QuickActionsCard(
+    onNavigateToSchedule: () -> Unit,
+    onNavigateToGrades: () -> Unit,
+    onNavigateToNews: () -> Unit,
+    onNavigateToAdmin: (() -> Unit)? = null,  // Добавляем опциональный параметр
+    isAdmin: Boolean = false  // Флаг администратора
+) {
+    PersonalCard(
+        modifier = Modifier.fillMaxWidth(),
+        backgroundColor = MaterialTheme.colorScheme.surface,
+        borderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+    ) {
+        Text(
+            text = "Быстрые действия",
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(bottom = 16.dp)
+        )
+
+        // Определяем количество кнопок для равномерного распределения
+        val buttonCount = if (isAdmin && onNavigateToAdmin != null) 4 else 3
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = if (buttonCount == 4)
+                Arrangement.SpaceEvenly
+            else
+                Arrangement.SpaceEvenly
+        ) {
+            QuickActionButton(
+                icon = Icons.Default.DateRange,
+                label = "Расписание",
+                onClick = onNavigateToSchedule,
+                color = MaterialTheme.colorScheme.primary
+            )
+
+            QuickActionButton(
+                icon = Icons.Default.Grade,
+                label = "Оценки",
+                onClick = onNavigateToGrades,
+                color = MaterialTheme.colorScheme.primary
+            )
+
+            QuickActionButton(
+                icon = Icons.Default.Menu,
+                label = "Новости",
+                onClick = onNavigateToNews,
+                color = MaterialTheme.colorScheme.primary
+            )
+
+            // Кнопка администратора только для админа
+            if (isAdmin && onNavigateToAdmin != null) {
+                QuickActionButton(
+                    icon = Icons.Default.Settings,
+                    label = "Админ",
+                    onClick = onNavigateToAdmin,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+            }
+        }
+    }
+}
 @Composable
 fun GreetingCard(
     userName: String,

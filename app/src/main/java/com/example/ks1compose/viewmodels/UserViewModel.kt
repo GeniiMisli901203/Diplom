@@ -143,6 +143,41 @@ class UserViewModel : ViewModel() {
         _students.value = emptyList()
     }
 
+    fun loadAllStudents() {
+        viewModelScope.launch {
+            _isLoading.value = true
+            _error.value = null
+
+            when (val result = repository.getAllStudents()) {
+                is UserRepository.Result.Success -> {
+                    println("📦 Загружено учеников: ${result.data.size}")
+                    result.data.forEachIndexed { index, user ->
+                        println("📦 Ученик $index: name=${user.name}, class='${user.uClass}'")
+                    }
+
+                    _students.value = result.data.map { user ->
+                        StudentUIModel(
+                            id = user.userId,
+                            name = "${user.name ?: ""} ${user.sName ?: ""}".trim(),
+                            className = user.uClass,  // Теперь должно быть не null
+                            averageGrade = null
+                        )
+                    }
+
+                    println("📦 После конвертации: ${_students.value.size} учеников")
+                    _students.value.forEachIndexed { index, student ->
+                        println("📦 StudentUIModel $index: name=${student.name}, className='${student.className}'")
+                    }
+                }
+                is UserRepository.Result.Error -> {
+                    _error.value = result.message
+                    println("📦 Ошибка загрузки: ${result.message}")
+                }
+                else -> {}
+            }
+            _isLoading.value = false
+        }
+    }
 
 
     fun clearError() {

@@ -3,10 +3,12 @@ package com.example.ks1compose
 import android.app.Application
 import android.content.Context
 import android.content.pm.ActivityInfo
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.annotation.RequiresExtension
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -76,6 +78,7 @@ import com.example.ks1compose.viewmodels.factories.NewsViewModelFactory
 import com.example.ks1compose.viewmodels.factories.ScheduleViewModelFactory
 
 class MainActivity : ComponentActivity() {
+    @RequiresExtension(extension = Build.VERSION_CODES.S, version = 7)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
@@ -151,6 +154,7 @@ fun AppBar(
     )
 }
 
+@RequiresExtension(extension = Build.VERSION_CODES.S, version = 7)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppContent(
@@ -327,7 +331,8 @@ fun AppContent(
                     newsViewModel = newsViewModel,
                     onNavigateToSchedule = { navController.navigate("schedule") },
                     onNavigateToGrades = { navController.navigate("grades") },
-                    onNavigateToNews = { navController.navigate("ideas") }
+                    onNavigateToNews = { navController.navigate("ideas") },
+                    onNavigateToAdmin = { navController.navigate("admin") }
                 )
             }
 
@@ -474,6 +479,16 @@ fun AppContent(
                     onNavigateBack = { navController.navigateUp() },
                     onSelectStudent = { studentId ->
                         navController.navigate("add_grade?studentId=$studentId&className=$className")
+                    }
+                )
+            }
+            composable("admin") {
+                AdminScreen(
+                    userViewModel = userViewModel,
+                    onNavigateBack = { navController.navigateUp() },
+                    onUserClick = { userId, className ->
+                        // Например, перейти к оценкам ученика
+                        navController.navigate("class_students/$className")
                     }
                 )
             }

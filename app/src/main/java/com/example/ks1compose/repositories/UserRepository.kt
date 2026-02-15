@@ -103,4 +103,36 @@ class UserRepository {
             Result.Error(e.message ?: "Неизвестная ошибка")
         }
     }
+    // com.example.ks1compose.repositories.UserRepository.kt
+// Убедитесь, что метод getAllStudents выглядит так:
+
+    suspend fun getAllStudents(): Result<List<UserDTO>> {
+        return withContext(Dispatchers.IO) {
+            try {
+                println("📡 Запрос к /students/all")
+                val response = api.getAllStudents() // Это должно быть /students/all
+
+                println("📡 Статус: ${response.code()}")
+                println("📡 Ответ: ${response.body()}")
+
+                if (response.isSuccessful && response.body() != null) {
+                    val students = response.body()!!.students ?: emptyList()
+                    println("📡 Получено учеников: ${students.size}")
+                    Result.Success(students)
+                } else {
+                    println("📡 Ошибка: ${response.message()}")
+                    Result.Error(response.message() ?: "Ошибка загрузки учеников")
+                }
+            } catch (e: HttpException) {
+                println("📡 HttpException: ${e.message()}")
+                Result.Error("Ошибка сети: ${e.message()}")
+            } catch (e: IOException) {
+                println("📡 IOException: ${e.message}")
+                Result.Error("Проверьте подключение к интернету")
+            } catch (e: Exception) {
+                println("📡 Exception: ${e.message}")
+                Result.Error("Неизвестная ошибка: ${e.message}")
+            }
+        }
+    }
 }

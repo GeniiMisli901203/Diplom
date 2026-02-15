@@ -1,5 +1,6 @@
 package com.example.ks1compose.models
 
+import com.google.gson.annotations.SerializedName
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -8,7 +9,7 @@ data class UserDTO(
     val email: String,
     val name: String,
     val sName: String,
-    val uClass: String,
+    @SerializedName("class") val uClass: String,  // Важно: маппинг поля "class" из JSON
     val school: String,
     val role: String,
     val teacherId: String? = null

@@ -209,4 +209,9 @@ interface ApiService {
         @Path("studentId") studentId: String,
         @Header("Authorization") token: String
     ): Response<Map<String, Any>>
+
+    @GET("/students/all")
+    suspend fun getAllStudents(): Response<StudentsListResponse>
+
+
 }
