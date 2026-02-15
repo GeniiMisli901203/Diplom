@@ -106,7 +106,6 @@ class UserViewModel : ViewModel() {
             when (val result = repository.getStudentsByClass(className)) {
                 is UserRepository.Result.Success -> {
                     _students.value = result.data
-                    _error.value = null
                 }
                 is UserRepository.Result.Error -> {
                     _error.value = result.message
@@ -139,6 +138,12 @@ class UserViewModel : ViewModel() {
     fun clearUpdateResult() {
         _updateResult.value = null
     }
+
+    fun clearStudents() {
+        _students.value = emptyList()
+    }
+
+
 
     fun clearError() {
         _error.value = null

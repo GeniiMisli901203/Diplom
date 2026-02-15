@@ -1,8 +1,11 @@
 package com.example.ks1compose.Screens
 
+import android.os.Build
+import androidx.annotation.RequiresExtension
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -20,88 +23,167 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.ks1compose.PersonalUsefulElements.PersonalButton
 import com.example.ks1compose.PersonalUsefulElements.PersonalCard
 import com.example.ks1compose.PersonalUsefulElements.PersonalLoadingIndicator
+import com.example.ks1compose.models.GradeUIModel
+import com.example.ks1compose.repositories.GradeRepository
 import com.example.ks1compose.viewmodels.GradeViewModel
 import com.example.ks1compose.viewmodels.UserViewModel
 
-@OptIn(ExperimentalMaterial3Api::class)
+@RequiresExtension(extension = Build.VERSION_CODES.S, version = 7)
 @Composable
 fun GradeScreen(
     gradeViewModel: GradeViewModel,
     userViewModel: UserViewModel,
-    userRole: String
+    userRole: String,
+    onClassClick: (String) -> Unit = {},
+    onStudentClick: (String, String) -> Unit = { _, _ -> }
 ) {
     val userInfo by userViewModel.userInfo.collectAsStateWithLifecycle()
     val myGrades by gradeViewModel.myGrades.collectAsStateWithLifecycle()
+    val classGrades by gradeViewModel.classGrades.collectAsStateWithLifecycle()
     val averageGrade by gradeViewModel.averageGrade.collectAsStateWithLifecycle()
     val isLoading by gradeViewModel.isLoading.collectAsStateWithLifecycle()
+    val error by gradeViewModel.error.collectAsStateWithLifecycle()
+    val addGradeResult by gradeViewModel.addGradeResult.collectAsStateWithLifecycle()
 
-    LaunchedEffect(Unit) {
-        if (userRole == "student" && userInfo?.uClass != null) {
-            gradeViewModel.loadMyGrades()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
+
+    val classList = remember {
+        listOf("5А", "5Б", "6А", "6Б", "7А", "7Б", "8А", "8Б", "9А", "9Б", "10А", "10Б", "11А", "11Б")
+    }
+
+    var selectedClass by remember { mutableStateOf<String?>(null) }
+    var selectedStudent by remember { mutableStateOf<String?>(null) }
+    var showAddGradeDialog by remember { mutableStateOf(false) }
+
+    // Показываем сообщение об успешном добавлении оценки
+    LaunchedEffect(addGradeResult) {
+        if (addGradeResult is GradeRepository.Result.Success) {
+            snackbarHostState.showSnackbar(
+                message = "Оценка успешно добавлена",
+                duration = SnackbarDuration.Short
+            )
+            gradeViewModel.clearResults()
+            // Обновляем список оценок если выбран класс
+            if (selectedClass != null) {
+                gradeViewModel.loadClassGrades(selectedClass!!)
+            }
         }
     }
 
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        if (userRole == "teacher") "Оценки классов" else "Мои оценки",
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                ),
-                actions = {
-                    if (userRole == "teacher") {
-                        IconButton(onClick = { /* Navigate to add grade */ }) {
-                            Icon(
-                                Icons.Default.Add,
-                                contentDescription = "Добавить оценку"
-                            )
-                        }
-                    }
-                }
-            )
-        }
+        snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { paddingValues ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            if (isLoading) {
-                PersonalLoadingIndicator()
-            } else if (userRole == "student") {
-                StudentGradesContent(
-                    grades = myGrades,
-                    averageGrade = averageGrade,
-                    className = userInfo?.uClass ?: ""
-                )
-            } else {
-                TeacherGradesContent()
+            when (userRole) {
+                "student" -> {
+                    // Добавляем LaunchedEffect для загрузки оценок
+                    LaunchedEffect(Unit) {
+                        gradeViewModel.loadMyGrades()  // Загружаем оценки при входе
+                    }
+
+                    StudentGradesContent(
+                        grades = myGrades,
+                        averageGrade = averageGrade,
+                        className = userInfo?.uClass ?: "",
+                        isLoading = isLoading,
+                        error = error,
+                        onRefresh = {
+                            gradeViewModel.loadMyGrades()  // Обновляем по кнопке
+                        }
+                    )
+                }
+                "teacher", "admin" -> {
+                    // Если класс не выбран, показываем список классов
+                    if (selectedClass == null) {
+                        ClassListContent(
+                            classList = classList,
+                            isLoading = isLoading,
+                            error = error,
+                            onClassSelected = { className ->
+                                selectedClass = className
+                                gradeViewModel.loadClassGrades(className)
+                                onClassClick(className)
+                            },
+                            onRefresh = { /* Ничего не делаем при обновлении списка классов */ }
+                        )
+                    } else {
+                        // Показываем оценки выбранного класса
+                        TeacherClassGradesContent(
+                            className = selectedClass!!,
+                            onBack = {
+                                selectedClass = null
+                                selectedStudent = null
+                            },
+                            onAddGradeClick = {
+                                showAddGradeDialog = true
+                            },
+                            classGrades = classGrades,
+                            isLoading = isLoading,
+                            error = error,
+                            onRefresh = {
+                                gradeViewModel.loadClassGrades(selectedClass!!)
+                            },
+                            onStudentClick = onStudentClick
+                        )
+                    }
+                }
             }
         }
+    }
+
+    // Диалог добавления оценки
+    if (showAddGradeDialog && selectedClass != null) {
+        AddGradeDialog(
+            className = selectedClass!!,
+            userViewModel = userViewModel,  // <-- Добавьте эту строку
+            onDismiss = {
+                showAddGradeDialog = false
+                userViewModel.clearStudents() // Очищаем список учеников при закрытии
+            },
+            onConfirm = { studentId, subject, gradeValue, gradeType, comment, lessonDate ->
+                gradeViewModel.addGrade(
+                    studentId = studentId,
+                    subjectName = subject,
+                    className = selectedClass!!,
+                    gradeValue = gradeValue,
+                    gradeType = gradeType,
+                    comment = comment,
+                    lessonDate = lessonDate
+                )
+                showAddGradeDialog = false
+                userViewModel.clearStudents()
+            }
+        )
     }
 }
 
 @Composable
 fun StudentGradesContent(
-    grades: List<com.example.ks1compose.models.GradeUIModel>,
+    grades: List<GradeUIModel>,
     averageGrade: Double?,
-    className: String
+    className: String,
+    isLoading: Boolean,
+    error: String?,
+    onRefresh: () -> Unit
 ) {
+    if (isLoading && grades.isEmpty()) {
+        PersonalLoadingIndicator()
+        return
+    }
+
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
+        modifier = Modifier.fillMaxWidth()
     ) {
-        // Средний балл
+        // Информационная карточка
         Card(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp),
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.primaryContainer
@@ -127,53 +209,45 @@ fun StudentGradesContent(
                         color = MaterialTheme.colorScheme.onPrimaryContainer
                     )
                 }
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(48.dp)
+                Column(
+                    horizontalAlignment = Alignment.End
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            Icons.Default.Grade,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
+                    Text(
+                        text = "$className класс",
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                    )
+                    Text(
+                        text = "${grades.size} оценок",
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f)
+                    )
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Список оценок
-        if (grades.isEmpty()) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(32.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                Icon(
-                    Icons.Default.Grade,
-                    contentDescription = null,
-                    modifier = Modifier.size(64.dp),
-                    tint = Color.Gray.copy(alpha = 0.5f)
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = "У вас пока нет оценок",
-                    fontSize = 16.sp,
-                    color = Color.Gray
-                )
-            }
+        if (error != null) {
+            ErrorMessage(
+                message = error,
+                onRetry = onRefresh
+            )
+        } else if (grades.isEmpty()) {
+            EmptyGradesMessage()
         } else {
+            // Группировка оценок по предметам
+            val gradesBySubject = grades.groupBy { it.subjectName }
+
             LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                items(grades) { grade ->
-                    GradeCard(grade = grade)
+                gradesBySubject.forEach { (subject, subjectGrades) ->
+                    item {
+                        SubjectGradesCard(
+                            subject = subject,
+                            grades = subjectGrades,
+                            averageGrade = subjectGrades.map { it.gradeValue }.average()
+                        )
+                    }
                 }
             }
         }
@@ -181,140 +255,210 @@ fun StudentGradesContent(
 }
 
 @Composable
-fun GradeCard(
-    grade: com.example.ks1compose.models.GradeUIModel
+fun SubjectGradesCard(
+    subject: String,
+    grades: List<GradeUIModel>,
+    averageGrade: Double
 ) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { /* Navigate to grade detail */ },
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    PersonalCard(
+        modifier = Modifier.fillMaxWidth(),
+        backgroundColor = MaterialTheme.colorScheme.surface,
+        borderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
+        Column(
+            modifier = Modifier.fillMaxWidth()
         ) {
-            // Оценка
-            Surface(
-                modifier = Modifier.size(48.dp),
-                shape = RoundedCornerShape(12.dp),
-                color = grade.color.copy(alpha = 0.2f)
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text(
-                        text = grade.gradeValue.toString(),
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = grade.color
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.width(16.dp))
-
-            // Информация
-            Column(
-                modifier = Modifier.weight(1f)
+            // Заголовок предмета
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = grade.subjectName,
-                    fontSize = 16.sp,
+                    text = subject,
+                    fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.primary
                 )
-                Text(
-                    text = "${grade.gradeType} • ${grade.date}",
-                    fontSize = 12.sp,
-                    color = Color.Gray
-                )
-                if (!grade.comment.isNullOrEmpty()) {
+
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
                     Text(
-                        text = grade.comment,
-                        fontSize = 12.sp,
-                        color = Color.Gray.copy(alpha = 0.8f),
-                        maxLines = 1
+                        text = String.format("%.2f", averageGrade),
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
                     )
                 }
             }
 
-            // Учитель
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Горизонтальный список оценок
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(grades.size) { index ->
+                    val grade = grades[index]
+                    GradeChip(grade = grade)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun GradeChip(
+    grade: GradeUIModel
+) {
+    Surface(
+        modifier = Modifier
+            .width(60.dp)
+            .height(40.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .clickable { /* Открыть детали */ },
+        color = grade.color.copy(alpha = 0.2f)
+    ) {
+        Column(
+            modifier = Modifier.padding(4.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
             Text(
-                text = grade.teacherName,
-                fontSize = 12.sp,
-                color = Color.Gray,
-                modifier = Modifier.padding(start = 8.dp)
+                text = grade.gradeValue.toString(),
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = grade.color
+            )
+            Text(
+                text = grade.date.takeLast(2), // Показываем только день
+                fontSize = 10.sp,
+                color = Color.Gray
             )
         }
     }
 }
 
 @Composable
-fun TeacherGradesContent() {
+fun TeacherGradesContent(
+    classList: List<String>,
+    selectedClass: String?,
+    onClassSelected: (String) -> Unit,
+    selectedStudent: String?,
+    onStudentSelected: (String) -> Unit,
+    classGrades: List<GradeUIModel>,
+    isLoading: Boolean,
+    error: String?,
+    onRefresh: () -> Unit
+) {
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Surface(
-            shape = RoundedCornerShape(16.dp),
-            color = MaterialTheme.colorScheme.secondaryContainer,
-            modifier = Modifier.size(80.dp)
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    Icons.Default.Grade,
-                    contentDescription = null,
-                    modifier = Modifier.size(40.dp),
-                    tint = MaterialTheme.colorScheme.secondary
-                )
+        // Список классов
+        if (selectedClass == null) {
+            Text(
+                text = "Выберите класс",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(bottom = 16.dp)
+            )
+
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(classList) { className ->
+                    ClassCard(
+                        className = className,
+                        onClick = { onClassSelected(className) }
+                    )
+                }
             }
-        }
-        Spacer(modifier = Modifier.height(16.dp))
-        Text(
-            text = "Оценки классов",
-            fontSize = 18.sp,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.secondary
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = "Выберите класс для просмотра оценок",
-            fontSize = 14.sp,
-            color = Color.Gray
-        )
-        Spacer(modifier = Modifier.height(16.dp))
+        } else {
+            // Заголовок с выбранным классом
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = { onClassSelected("") }) {
+                        Icon(
+                            Icons.Default.ArrowBack,
+                            contentDescription = "Назад"
+                        )
+                    }
+                    Text(
+                        text = "$selectedClass класс",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
 
-        val classList = listOf("5А", "5Б", "6А", "6Б", "7А", "7Б", "8А", "8Б", "9А", "9Б", "10А", "10Б", "11А", "11Б")
+                IconButton(onClick = onRefresh) {
+                    Icon(
+                        Icons.Default.Refresh,
+                        contentDescription = "Обновить"
+                    )
+                }
+            }
 
-        LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            items(classList) { className ->
-                ClassCard(className = className)
+            if (isLoading && classGrades.isEmpty()) {
+                PersonalLoadingIndicator()
+            } else if (error != null) {
+                ErrorMessage(
+                    message = error,
+                    onRetry = onRefresh
+                )
+            } else if (classGrades.isEmpty()) {
+                EmptyGradesMessage()
+            } else {
+                // Группировка оценок по ученикам
+                val gradesByStudent = classGrades.groupBy { it.id to it.subjectName }
+
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    gradesByStudent.forEach { (studentInfo, studentGrades) ->
+                        val (studentId, studentName) = studentInfo
+                        item {
+                            StudentGradesCard(
+                                studentId = studentId,
+                                studentName = studentName ?: "Ученик",
+                                grades = studentGrades,
+                                onClick = { onStudentSelected(studentId) }
+                            )
+                        }
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-fun ClassCard(className: String) {
+fun ClassCard(
+    className: String,
+    onClick: () -> Unit
+) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { /* Navigate to class grades */ },
+            .clickable { onClick() },
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Row(
             modifier = Modifier
@@ -329,18 +473,18 @@ fun ClassCard(className: String) {
                 Surface(
                     shape = RoundedCornerShape(8.dp),
                     color = MaterialTheme.colorScheme.primaryContainer,
-                    modifier = Modifier.size(40.dp)
+                    modifier = Modifier.size(48.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Text(
                             text = className,
-                            fontSize = 14.sp,
+                            fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
                         )
                     }
                 }
-                Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.width(16.dp))
                 Column {
                     Text(
                         text = "$className класс",
@@ -349,7 +493,7 @@ fun ClassCard(className: String) {
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "24 ученика",
+                        text = "Посмотреть оценки",
                         fontSize = 12.sp,
                         color = Color.Gray
                     )
@@ -357,9 +501,299 @@ fun ClassCard(className: String) {
             }
             Icon(
                 Icons.Default.ChevronRight,
-                contentDescription = "Перейти",
+                contentDescription = null,
                 tint = Color.Gray
             )
+        }
+    }
+}
+
+@Composable
+fun StudentGradesCard(
+    studentId: String,
+    studentName: String,
+    grades: List<GradeUIModel>,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = studentName,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+
+                // Средний балл ученика
+                val avg = grades.map { it.gradeValue }.average()
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = String.format("%.2f", avg),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Группировка оценок по предметам
+            val gradesBySubject = grades.groupBy { it.subjectName }
+
+            gradesBySubject.forEach { (subject, subjectGrades) ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = subject,
+                        fontSize = 14.sp,
+                        color = Color.Gray
+                    )
+
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        subjectGrades.take(3).forEach { grade ->
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = grade.color.copy(alpha = 0.2f),
+                                modifier = Modifier.size(24.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Text(
+                                        text = grade.gradeValue.toString(),
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = grade.color
+                                    )
+                                }
+                            }
+                        }
+                        if (subjectGrades.size > 3) {
+                            Text(
+                                text = "+${subjectGrades.size - 3}",
+                                fontSize = 12.sp,
+                                color = Color.Gray
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ErrorMessage(
+    message: String,
+    onRetry: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(
+            Icons.Default.Error,
+            contentDescription = null,
+            modifier = Modifier.size(48.dp),
+            tint = Color.Red
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = message,
+            fontSize = 14.sp,
+            color = Color.Gray,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        PersonalButton(
+            text = "Повторить",
+            onClick = onRetry,
+            widthFactor = 0.5f
+        )
+    }
+}
+
+@Composable
+fun EmptyGradesMessage() {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(
+            Icons.Default.Star,
+            contentDescription = null,
+            modifier = Modifier.size(64.dp),
+            tint = Color.Gray.copy(alpha = 0.5f)
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = "Оценок пока нет",
+            fontSize = 16.sp,
+            color = Color.Gray
+        )
+    }
+}
+
+@Composable
+fun TeacherClassGradesContent(
+    className: String,
+    onBack: () -> Unit,
+    onAddGradeClick: () -> Unit,
+    classGrades: List<GradeUIModel>,
+    isLoading: Boolean,
+    error: String?,
+    onRefresh: () -> Unit,
+    onStudentClick: (String, String) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+    ) {
+        // Заголовок с выбранным классом
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onBack) {
+                    Icon(
+                        Icons.Default.ArrowBack,
+                        contentDescription = "Назад"
+                    )
+                }
+                Text(
+                    text = "$className класс",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+
+            Row {
+                IconButton(onClick = onAddGradeClick) {
+                    Icon(
+                        Icons.Default.Add,
+                        contentDescription = "Добавить оценку",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+
+                IconButton(onClick = onRefresh) {
+                    Icon(
+                        Icons.Default.Refresh,
+                        contentDescription = "Обновить"
+                    )
+                }
+            }
+        }
+
+        if (isLoading && classGrades.isEmpty()) {
+            PersonalLoadingIndicator()
+        } else if (error != null) {
+            ErrorMessage(
+                message = error,
+                onRetry = onRefresh
+            )
+        } else if (classGrades.isEmpty()) {
+            EmptyGradesMessage()
+        } else {
+            // Правильная группировка оценок по ученикам
+            val gradesByStudent = classGrades.groupBy { it.studentId }
+
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                gradesByStudent.forEach { (studentId, studentGrades) ->
+                    val studentName = studentGrades.firstOrNull()?.studentName ?: "Ученик"
+                    item {
+                        StudentGradesCard(
+                            studentId = studentId,
+                            studentName = studentName,
+                            grades = studentGrades,
+                            onClick = { onStudentClick(studentId, className) }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+@Composable
+fun ClassListContent(
+    classList: List<String>,
+    isLoading: Boolean,
+    error: String?,
+    onClassSelected: (String) -> Unit,
+    onRefresh: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+    ) {
+        Text(
+            text = "Выберите класс",
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(bottom = 16.dp)
+        )
+
+        if (error != null) {
+            ErrorMessage(
+                message = error,
+                onRetry = onRefresh
+            )
+        } else {
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(classList) { className ->
+                    ClassCard(
+                        className = className,
+                        onClick = { onClassSelected(className) }
+                    )
+                }
+            }
         }
     }
 }

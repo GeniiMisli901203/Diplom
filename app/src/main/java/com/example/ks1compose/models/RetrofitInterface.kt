@@ -189,4 +189,24 @@ interface ApiService {
     suspend fun checkRole(
         @Header("Authorization") token: String
     ): Response<Map<String, Any>>
+
+    @GET("/grades/today/{studentId}")
+    suspend fun getTodayGrades(
+        @Path("studentId") studentId: String,
+        @Header("Authorization") token: String
+    ): Response<GradeResponse>
+
+    // Получить оценки всего класса с группировкой по ученикам
+    @GET("/grades/class/{className}/students")
+    suspend fun getClassStudentsGrades(
+        @Path("className") className: String,
+        @Header("Authorization") token: String
+    ): Response<Map<String, Any>>
+
+    // Получить средний балл ученика по предметам
+    @GET("/grades/average/{studentId}/subjects")
+    suspend fun getStudentAveragesBySubject(
+        @Path("studentId") studentId: String,
+        @Header("Authorization") token: String
+    ): Response<Map<String, Any>>
 }

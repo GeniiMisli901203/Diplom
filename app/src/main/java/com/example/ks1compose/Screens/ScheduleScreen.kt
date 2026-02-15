@@ -84,40 +84,6 @@ fun ScheduleScreen(
     }
 
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(
-                            "Расписание",
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        if (userInfo?.role == "student" && !userInfo?.uClass.isNullOrBlank()) {
-                            Text(
-                                text = "${userInfo?.uClass} класс",
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Normal,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
-                            )
-                        }
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                ),
-                actions = {
-                    // Кнопка выбора дня
-                    IconButton(onClick = { showDaySelector = true }) {
-                        Icon(
-                            Icons.Default.CalendarToday,
-                            contentDescription = "Выбрать день"
-                        )
-                    }
-                }
-            )
-        }
     ) { paddingValues ->
         Box(
             modifier = Modifier

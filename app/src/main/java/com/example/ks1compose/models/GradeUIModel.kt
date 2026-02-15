@@ -1,18 +1,22 @@
 package com.example.ks1compose.models
 
+import androidx.compose.ui.graphics.Color
 import com.example.ks1compose.DTOs.GradeDTO
 import com.example.ks1compose.DTOs.LessonDTO
+
 
 // Модель для отображения оценки в UI
 data class GradeUIModel(
     val id: String,
+    val studentId: String,
+    val studentName: String,
     val subjectName: String,
     val gradeValue: Int,
     val gradeType: String,
     val teacherName: String,
     val comment: String?,
     val date: String,
-    val color: androidx.compose.ui.graphics.Color
+    val color: Color
 )
 
 // Модель для отображения урока в UI
@@ -27,11 +31,11 @@ data class LessonUIModel(
     val isCurrentLesson: Boolean = false
 )
 
-// Модель для отображения студента в UI
+// Модель для отображения студента в UI - ИСПРАВЛЕНО: className теперь nullable
 data class StudentUIModel(
     val id: String,
     val name: String,
-    val className: String,
+    val className: String? = null,  // <-- Сделали nullable с значением по умолчанию
     val averageGrade: Double? = null
 )
 
@@ -46,24 +50,26 @@ data class DashboardData(
     val newsCount: Int = 0
 )
 
-// Конвертеры DTO -> UI Model
+// Конвертер DTO -> UI Model
 object ModelConverter {
 
     fun convertGradeToUIModel(grade: GradeDTO): GradeUIModel {
         val color = when (grade.gradeValue) {
-            5 -> androidx.compose.ui.graphics.Color.Green
-            4 -> androidx.compose.ui.graphics.Color(0xFF4CAF50) // Light Green
-            3 -> androidx.compose.ui.graphics.Color(0xFFFFC107) // Amber
-            2 -> androidx.compose.ui.graphics.Color.Red
-            else -> androidx.compose.ui.graphics.Color.Gray
+            5 -> Color.Green
+            4 -> Color(0xFF4CAF50)
+            3 -> Color(0xFFFFC107)
+            2 -> Color.Red
+            else -> Color.Gray
         }
 
         return GradeUIModel(
             id = grade.gradeId ?: "",
+            studentId = grade.studentId,
+            studentName = grade.studentName ?: "Ученик",
             subjectName = grade.subjectName,
             gradeValue = grade.gradeValue,
             gradeType = grade.gradeType,
-            teacherName = grade.teacherName ?: "Неизвестно",
+            teacherName = grade.teacherName ?: "Учитель",
             comment = grade.comment,
             date = grade.lessonDate,
             color = color
@@ -78,15 +84,17 @@ object ModelConverter {
             teacherName = lesson.teacherName,
             room = lesson.room,
             startTime = lesson.startTime,
-            endTime = lesson.endTime
+            endTime = lesson.endTime,
+            isCurrentLesson = false
         )
     }
 
     fun convertUserToStudentModel(user: UserDTO): StudentUIModel {
         return StudentUIModel(
             id = user.userId,
-            name = "${user.name} ${user.sName}",
-            className = user.uClass
+            name = "${user.name ?: ""} ${user.sName ?: ""}".trim(), // Защита от null
+            className = user.uClass,  // Теперь может быть null, и это ок
+            averageGrade = null
         )
     }
 }

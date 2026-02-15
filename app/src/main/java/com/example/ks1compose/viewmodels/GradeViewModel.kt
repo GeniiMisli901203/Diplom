@@ -1,43 +1,48 @@
 package com.example.ks1compose.viewmodels
 
+import android.os.Build
+import androidx.annotation.RequiresExtension
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.ks1compose.DTOs.GradeDTO
 import com.example.ks1compose.models.GradeUIModel
+import com.example.ks1compose.models.ModelConverter
 import com.example.ks1compose.models.TokenManager
 import com.example.ks1compose.repositories.GradeRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 class GradeViewModel : ViewModel() {
     private val repository = GradeRepository()
 
     private val _myGrades = MutableStateFlow<List<GradeUIModel>>(emptyList())
-    val myGrades: StateFlow<List<GradeUIModel>> = _myGrades
+    val myGrades: StateFlow<List<GradeUIModel>> = _myGrades.asStateFlow()
 
     private val _classGrades = MutableStateFlow<List<GradeUIModel>>(emptyList())
-    val classGrades: StateFlow<List<GradeUIModel>> = _classGrades
+    val classGrades: StateFlow<List<GradeUIModel>> = _classGrades.asStateFlow()
 
     private val _averageGrade = MutableStateFlow<Double?>(null)
-    val averageGrade: StateFlow<Double?> = _averageGrade
+    val averageGrade: StateFlow<Double?> = _averageGrade.asStateFlow()
 
     private val _addGradeResult = MutableStateFlow<GradeRepository.Result<String>?>(null)
-    val addGradeResult: StateFlow<GradeRepository.Result<String>?> = _addGradeResult
+    val addGradeResult: StateFlow<GradeRepository.Result<String>?> = _addGradeResult.asStateFlow()
 
     private val _updateGradeResult = MutableStateFlow<GradeRepository.Result<String>?>(null)
-    val updateGradeResult: StateFlow<GradeRepository.Result<String>?> = _updateGradeResult
+    val updateGradeResult: StateFlow<GradeRepository.Result<String>?> = _updateGradeResult.asStateFlow()
 
     private val _deleteGradeResult = MutableStateFlow<GradeRepository.Result<String>?>(null)
-    val deleteGradeResult: StateFlow<GradeRepository.Result<String>?> = _deleteGradeResult
+    val deleteGradeResult: StateFlow<GradeRepository.Result<String>?> = _deleteGradeResult.asStateFlow()
 
     private val _isLoading = MutableStateFlow(false)
-    val isLoading: StateFlow<Boolean> = _isLoading
+    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
     private val _error = MutableStateFlow<String?>(null)
-    val error: StateFlow<String?> = _error
+    val error: StateFlow<String?> = _error.asStateFlow()
 
     // Загрузка оценок ученика
+    @RequiresExtension(extension = Build.VERSION_CODES.S, version = 7)
     fun loadMyGrades(
         subject: String? = null,
         startDate: String? = null,
@@ -45,15 +50,47 @@ class GradeViewModel : ViewModel() {
     ) {
         viewModelScope.launch {
             _isLoading.value = true
+            _error.value = null
+
             when (val result = repository.getMyGrades(subject, startDate, endDate)) {
                 is GradeRepository.Result.Success -> {
                     _myGrades.value = result.data
-                    _error.value = null
                     // Вычисляем средний балл
-                    if (result.data.isNotEmpty()) {
-                        _averageGrade.value = result.data.map { it.gradeValue }.average()
+                    _averageGrade.value = if (result.data.isNotEmpty()) {
+                        result.data.map { it.gradeValue }.average()
                     } else {
-                        _averageGrade.value = null
+                        null
+                    }
+                }
+                is GradeRepository.Result.Error -> {
+                    _error.value = result.message
+                }
+                else -> {}
+            }
+            _isLoading.value = false
+        }
+    }
+
+    // Загрузка оценок за сегодня (для ученика)
+    @RequiresExtension(extension = Build.VERSION_CODES.S, version = 7)
+    fun loadTodayGrades() {
+        viewModelScope.launch {
+            _isLoading.value = true
+            _error.value = null
+
+            val studentId = TokenManager.userId ?: run {
+                _error.value = "Не авторизован"
+                _isLoading.value = false
+                return@launch
+            }
+
+            when (val result = repository.getTodayGrades(studentId)) {
+                is GradeRepository.Result.Success -> {
+                    _myGrades.value = result.data
+                    _averageGrade.value = if (result.data.isNotEmpty()) {
+                        result.data.map { it.gradeValue }.average()
+                    } else {
+                        null
                     }
                 }
                 is GradeRepository.Result.Error -> {
@@ -69,10 +106,11 @@ class GradeViewModel : ViewModel() {
     fun loadClassGrades(className: String, subject: String? = null) {
         viewModelScope.launch {
             _isLoading.value = true
+            _error.value = null
+
             when (val result = repository.getClassGrades(className, subject)) {
                 is GradeRepository.Result.Success -> {
                     _classGrades.value = result.data
-                    _error.value = null
                 }
                 is GradeRepository.Result.Error -> {
                     _error.value = result.message
@@ -95,6 +133,7 @@ class GradeViewModel : ViewModel() {
     ) {
         viewModelScope.launch {
             _isLoading.value = true
+            _error.value = null
 
             val teacherId = TokenManager.userId ?: run {
                 _error.value = "ID учителя не найден"
@@ -122,6 +161,7 @@ class GradeViewModel : ViewModel() {
     fun updateGrade(gradeId: String, gradeValue: Int, comment: String? = null) {
         viewModelScope.launch {
             _isLoading.value = true
+            _error.value = null
             _updateGradeResult.value = repository.updateGrade(gradeId, gradeValue, comment)
             _isLoading.value = false
         }
@@ -131,6 +171,7 @@ class GradeViewModel : ViewModel() {
     fun deleteGrade(gradeId: String) {
         viewModelScope.launch {
             _isLoading.value = true
+            _error.value = null
             _deleteGradeResult.value = repository.deleteGrade(gradeId)
             _isLoading.value = false
         }
