@@ -42,23 +42,34 @@ class UserRepository {
         }
     }
 
+    // com.example.ks1compose.repositories.UserRepository.kt
+    // com.example.ks1compose.repositories.UserRepository.kt
     suspend fun updateUserInfo(
+        userId: String,
         name: String,
         sName: String,
         uClass: String,
         school: String
     ): Result<String> {
-        return try {
-            val token = TokenManager.authToken ?: return Result.Error("Не авторизован")
-            val request = UpdateUserRequest(name, sName, uClass, school)
-            val response = apiWithAuth.updateUserInfo("Bearer $token", request)
-            if (response.isSuccessful) {
-                Result.Success("Данные обновлены")
-            } else {
-                Result.Error(response.message() ?: "Ошибка обновления")
+        return withContext(Dispatchers.IO) {
+            try {
+                val token = TokenManager.authToken ?: return@withContext Result.Error("Не авторизован")
+                val request = UpdateUserRequest(name, sName, uClass, school)
+
+                println("📤 Sending update for user $userId to: /user/update/$userId")
+                val response = api.updateUserById(userId, "Bearer $token", request)
+
+                if (response.isSuccessful) {
+                    println("✅ Update successful: ${response.body()}")
+                    Result.Success("Данные обновлены")
+                } else {
+                    println("❌ Update failed: ${response.code()} - ${response.message()}")
+                    Result.Error(response.message() ?: "Ошибка обновления")
+                }
+            } catch (e: Exception) {
+                println("🔥 Exception: ${e.message}")
+                Result.Error(e.message ?: "Неизвестная ошибка")
             }
-        } catch (e: Exception) {
-            Result.Error(e.message ?: "Неизвестная ошибка")
         }
     }
 
@@ -132,6 +143,26 @@ class UserRepository {
             } catch (e: Exception) {
                 println("📡 Exception: ${e.message}")
                 Result.Error("Неизвестная ошибка: ${e.message}")
+            }
+        }
+    }
+
+    suspend fun getUserById(userId: String): Result<UserDTO> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val response = api.getUserById(userId)
+                if (response.isSuccessful && response.body() != null) {
+                    val user = response.body()!!.user
+                    if (user != null) {
+                        Result.Success(user)
+                    } else {
+                        Result.Error("Пользователь не найден")
+                    }
+                } else {
+                    Result.Error(response.message() ?: "Ошибка получения пользователя")
+                }
+            } catch (e: Exception) {
+                Result.Error(e.message ?: "Неизвестная ошибка")
             }
         }
     }

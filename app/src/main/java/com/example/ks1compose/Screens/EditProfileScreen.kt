@@ -1,3 +1,4 @@
+// com.example.ks1compose.Screens.EditProfileScreen.kt
 package com.example.ks1compose.Screens
 
 import androidx.compose.foundation.layout.*
@@ -20,20 +21,20 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.ks1compose.PersonalUsefulElements.PersonalButton
 import com.example.ks1compose.PersonalUsefulElements.PersonalLoadingIndicator
 import com.example.ks1compose.PersonalUsefulElements.PersonalTextField
 import com.example.ks1compose.viewmodels.UserViewModel
 
+// com.example.ks1compose.Screens.EditProfileScreen.kt
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditProfileScreen(
     userViewModel: UserViewModel,
     onProfileUpdated: () -> Unit,
-    userLogin: String
+    userId: String
 ) {
-    val userInfo by userViewModel.userInfo.collectAsStateWithLifecycle()
+    val editingUser by userViewModel.editingUser.collectAsStateWithLifecycle()
     val isLoading by userViewModel.isLoading.collectAsStateWithLifecycle()
     val updateResult by userViewModel.updateResult.collectAsStateWithLifecycle()
     val error by userViewModel.error.collectAsStateWithLifecycle()
@@ -43,18 +44,24 @@ fun EditProfileScreen(
     var userClass by remember { mutableStateOf("") }
     var userSchool by remember { mutableStateOf("") }
 
+    // Состояния ошибок
     var nameError by remember { mutableStateOf<String?>(null) }
     var sNameError by remember { mutableStateOf<String?>(null) }
     var classError by remember { mutableStateOf<String?>(null) }
     var schoolError by remember { mutableStateOf<String?>(null) }
 
-    // Загружаем текущие данные пользователя
-    LaunchedEffect(userInfo) {
-        if (userInfo != null) {
-            userName = userInfo?.name ?: ""
-            userSName = userInfo?.sName ?: ""
-            userClass = userInfo?.uClass ?: ""
-            userSchool = userInfo?.school ?: ""
+    // Загружаем данные пользователя по ID
+    LaunchedEffect(userId) {
+        userViewModel.loadUserById(userId)
+    }
+
+    // Обновляем поля когда данные загружены
+    LaunchedEffect(editingUser) {
+        editingUser?.let {
+            userName = it.name ?: ""
+            userSName = it.sName ?: ""
+            userClass = it.uClass ?: ""
+            userSchool = it.school ?: ""
         }
     }
 
@@ -62,6 +69,7 @@ fun EditProfileScreen(
     LaunchedEffect(updateResult) {
         when (updateResult) {
             is UserViewModel.UpdateResult.Success -> {
+                // Не загружаем информацию админа, просто закрываем экран
                 onProfileUpdated()
                 userViewModel.clearUpdateResult()
             }
@@ -69,20 +77,39 @@ fun EditProfileScreen(
         }
     }
 
-    // Загружаем информацию о пользователе при первом входе
-    LaunchedEffect(Unit) {
-        userViewModel.loadUserInfo()
-    }
-
     Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Редактировать профиль", fontSize = 20.sp, fontWeight = FontWeight.Bold) },
+                navigationIcon = {
+                    IconButton(onClick = onProfileUpdated) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Назад")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            )
+        }
     ) { paddingValues ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            if (isLoading && userInfo == null) {
-                PersonalLoadingIndicator()
+            if (isLoading && editingUser == null) {
+                // Показываем индикатор загрузки, пока данные не получены
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(
+                        color = MaterialTheme.colorScheme.primary,
+                        strokeWidth = 3.dp,
+                        modifier = Modifier.size(50.dp)
+                    )
+                }
             } else {
                 Column(
                     modifier = Modifier
@@ -165,7 +192,7 @@ fun EditProfileScreen(
                             Spacer(modifier = Modifier.height(12.dp))
 
                             // Класс (только для учеников)
-                            if (userInfo?.role == "student") {
+                            if (editingUser?.role == "student") {
                                 PersonalTextField(
                                     text = userClass,
                                     label = "Класс",
@@ -200,7 +227,9 @@ fun EditProfileScreen(
 
                     Spacer(modifier = Modifier.height(24.dp))
 
-                    // Кнопка сохранения
+                    /// com.example.ks1compose.Screens.EditProfileScreen.kt
+// В кнопке сохранения:
+
                     PersonalButton(
                         text = "Сохранить изменения",
                         onClick = {
@@ -216,7 +245,7 @@ fun EditProfileScreen(
                                 isValid = false
                             }
 
-                            if (userInfo?.role == "student" && userClass.isBlank()) {
+                            if (editingUser?.role == "student" && userClass.isBlank()) {
                                 classError = "Введите класс"
                                 isValid = false
                             }
@@ -227,7 +256,9 @@ fun EditProfileScreen(
                             }
 
                             if (isValid) {
+                                println("📤 Calling updateUserInfo with userId: $userId")
                                 userViewModel.updateUserInfo(
+                                    userId = userId,
                                     name = userName,
                                     sName = userSName,
                                     uClass = userClass,
@@ -238,6 +269,7 @@ fun EditProfileScreen(
                         widthFactor = 1f,
                         isLoading = isLoading && updateResult is UserViewModel.UpdateResult.Loading
                     )
+
 
                     // Сообщение об ошибке
                     if (error != null && updateResult is UserViewModel.UpdateResult.Error) {

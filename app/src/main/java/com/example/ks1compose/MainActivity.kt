@@ -154,6 +154,9 @@ fun AppBar(
     )
 }
 
+// com.example.ks1compose.MainActivity.kt
+// Основные изменения в начале AppContent
+
 @RequiresExtension(extension = Build.VERSION_CODES.S, version = 7)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -177,18 +180,32 @@ fun AppContent(
         factory = NewsViewModelFactory(application)
     )
 
-    // Состояния навигации
-    var token by rememberSaveable { mutableStateOf(TokenManager.authToken) }
+    // Состояния навигации - загружаем из SharedPreferences при старте
+    var token by rememberSaveable { mutableStateOf(sharedPreferences.getString("token", null)) }
     var userLogin by rememberSaveable { mutableStateOf(sharedPreferences.getString("userLogin", null)) }
-    var userId by rememberSaveable { mutableStateOf(TokenManager.userId) }
-    var userRole by rememberSaveable { mutableStateOf(TokenManager.userRole) }
-    var userName by rememberSaveable { mutableStateOf(TokenManager.userName) }
+    var userId by rememberSaveable { mutableStateOf(sharedPreferences.getString("userId", null)) }
+    var userRole by rememberSaveable { mutableStateOf(sharedPreferences.getString("userRole", null)) }
+    var userName by rememberSaveable { mutableStateOf(sharedPreferences.getString("userName", null)) }
+    var userSName by rememberSaveable { mutableStateOf(sharedPreferences.getString("userSName", null)) }
+
+    // Флаг для отслеживания, была ли уже загружена информация о пользователе
+    var isUserInfoLoaded by rememberSaveable { mutableStateOf(false) }
 
     val currentRoute = navController.currentDestination?.route
-    // Загружаем информацию о пользователе при наличии токена
+
+    // При наличии токена, восстанавливаем TokenManager и загружаем информацию о пользователе
     LaunchedEffect(token) {
-        if (token != null && userViewModel.userInfo.value == null) {
+        if (token != null && !isUserInfoLoaded) {
+            // Восстанавливаем TokenManager
+            TokenManager.authToken = token
+            TokenManager.userId = userId
+            TokenManager.userRole = userRole
+            TokenManager.userName = userName
+            TokenManager.userSName = userSName
+
+            // Загружаем актуальную информацию о пользователе
             userViewModel.loadUserInfo()
+            isUserInfoLoaded = true
         }
     }
 
@@ -199,6 +216,7 @@ fun AppContent(
             userId = it.userId
             userRole = it.role
             userName = it.name
+            userSName = it.sName
             TokenManager.userId = it.userId
             TokenManager.userRole = it.role
             TokenManager.userName = it.name
@@ -213,6 +231,9 @@ fun AppContent(
                 .apply()
         }
     }
+
+    // Определяем стартовый экран
+    val startDestination = if (token != null) "dashboard" else "login"
 
     Scaffold(
         topBar = {
@@ -238,7 +259,7 @@ fun AppContent(
     ) { padding ->
         NavHost(
             navController = navController,
-            startDestination = if (token != null) "dashboard" else "login",
+            startDestination = startDestination,
             modifier = Modifier.padding(padding)
         ) {
             // ================ Аутентификация ================
@@ -246,11 +267,13 @@ fun AppContent(
                 LoginScreen(
                     authViewModel = authViewModel,
                     onNavigateToDashboard = { newToken, newUserId, newRole, newLogin, newName, newSName ->
+                        // Сохраняем все данные
                         token = newToken
                         userId = newUserId
                         userRole = newRole
                         userLogin = newLogin
                         userName = newName
+                        userSName = newSName
 
                         // Обновляем TokenManager
                         TokenManager.authToken = newToken
@@ -271,6 +294,7 @@ fun AppContent(
 
                         // Загружаем информацию о пользователе
                         userViewModel.loadUserInfo()
+                        isUserInfoLoaded = true
 
                         navController.navigate("dashboard") {
                             popUpTo("login") { inclusive = true }
@@ -291,6 +315,7 @@ fun AppContent(
                             userRole = newRole
                             userLogin = newLogin
                             userName = newName
+                            userSName = newSName
 
                             // Обновляем TokenManager
                             TokenManager.authToken = newToken
@@ -313,14 +338,13 @@ fun AppContent(
                                 popUpTo("registration") { inclusive = true }
                             }
                         } else {
-                            // Логируем ошибку и показываем сообщение
                             Log.e("MainActivity", "Invalid registration response: token=$newToken, userId=$newUserId, role=$newRole")
-                            // Можно показать Toast или Snackbar
                         }
                     },
                     onNavigateToLogin = { navController.navigate("login") }
                 )
             }
+
 
             // ================ Главный экран ================
             composable("dashboard") {
@@ -413,6 +437,19 @@ fun AppContent(
                 )
             }
 
+            composable(
+                "edit_grades/{userId}",
+                arguments = listOf(navArgument("userId") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val userId = backStackEntry.arguments?.getString("userId") ?: ""
+                AdminEditGradesScreen(
+                    userId = userId,
+                    userViewModel = userViewModel,
+                    gradeViewModel = gradeViewModel,
+                    onNavigateBack = { navController.navigateUp() }
+                )
+            }
+
             // ================ Аккаунт ================
             composable(
                 "account/{userLogin}",
@@ -456,14 +493,19 @@ fun AppContent(
             }
 
             composable(
-                "editProfile/{userLogin}",
-                arguments = listOf(navArgument("userLogin") { type = NavType.StringType })
+                "editProfile/{userId}",
+                arguments = listOf(navArgument("userId") { type = NavType.StringType })
             ) { backStackEntry ->
-                val login = backStackEntry.arguments?.getString("userLogin") ?: userLogin ?: ""
+                val userId = backStackEntry.arguments?.getString("userId") ?: ""
                 EditProfileScreen(
                     userViewModel = userViewModel,
-                    onProfileUpdated = { navController.navigateUp() },
-                    userLogin = login
+                    onProfileUpdated = {
+                        // После закрытия экрана редактирования, обновляем списки в админке
+                        userViewModel.loadAllStudents()
+                        userViewModel.loadAllTeachers()
+                        navController.navigateUp()
+                    },
+                    userId = userId
                 )
             }
 
@@ -485,10 +527,15 @@ fun AppContent(
             composable("admin") {
                 AdminScreen(
                     userViewModel = userViewModel,
+                    gradeViewModel = gradeViewModel,
                     onNavigateBack = { navController.navigateUp() },
-                    onUserClick = { userId, className ->
-                        // Например, перейти к оценкам ученика
-                        navController.navigate("class_students/$className")
+                    onEditProfile = { userId ->
+                        // Переход к редактированию профиля
+                        navController.navigate("editProfile/$userId")
+                    },
+                    onEditGrades = { userId ->
+                        // Переход к редактированию оценок
+                        navController.navigate("edit_grades/$userId")
                     }
                 )
             }

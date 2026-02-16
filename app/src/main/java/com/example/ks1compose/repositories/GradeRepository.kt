@@ -48,6 +48,31 @@ class GradeRepository {
         }
     }
 
+    suspend fun getUserGrades(userId: String): Result<List<GradeUIModel>> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val token = TokenManager.authToken ?: return@withContext Result.Error("Не авторизован")
+                // Используем существующий эндпоинт /grades/my, но он всегда берет текущего пользователя
+                // Нужен новый эндпоинт на сервере для получения оценок по ID
+                val response = api.getUserGrades(userId, "Bearer $token")
+
+                if (response.isSuccessful && response.body() != null) {
+                    val grades = response.body()!!.grades ?: emptyList()
+                    val uiModels = grades.map { ModelConverter.convertGradeToUIModel(it) }
+                    Result.Success(uiModels)
+                } else {
+                    Result.Error(response.message() ?: "Ошибка загрузки", response.code())
+                }
+            } catch (e: HttpException) {
+                Result.Error("Ошибка сети: ${e.message()}", e.code())
+            } catch (e: IOException) {
+                Result.Error("Проверьте подключение к интернету")
+            } catch (e: Exception) {
+                Result.Error("Неизвестная ошибка: ${e.message}")
+            }
+        }
+    }
+
     // Получить оценки ученика
     @RequiresExtension(extension = Build.VERSION_CODES.S, version = 7)
     suspend fun getMyGrades(

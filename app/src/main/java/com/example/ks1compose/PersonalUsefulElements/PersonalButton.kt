@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.sp
 import com.example.ks1compose.ui.theme.ButtonBGColor
 import com.example.ks1compose.ui.theme.DarkPink
 
+// com.example.ks1compose.PersonalUsefulElements.PersonalButton.kt
 @Composable
 fun PersonalButton(
     text: String,

@@ -13,6 +13,7 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
@@ -90,25 +91,38 @@ fun PersonalTextField(
         TextField(
             value = text,
             onValueChange = onValueChange,
-            label = { Text(label, fontSize = 14.sp) },
+            label = { Text(label, fontSize = 14.sp, color = if (isError) Color.Red else Color.White) },
             shape = RoundedCornerShape(25.dp),
             colors = TextFieldDefaults.colors(
+                // Цвета контейнера
                 unfocusedContainerColor = TextFieldBGColor,
-                focusedContainerColor = Color.White,
-                unfocusedTextColor = if (isPassword) Color.White else Color.White,
-                focusedTextColor = if (isPassword && !passwordVisible) TextFieldBGColor else TextFieldBGColor,
-                unfocusedLabelColor = Color.White,
-                focusedLabelColor = TextFieldBGColor,
+                focusedContainerColor = TextFieldBGColor.copy(alpha = 0.9f),
+
+                // Цвета текста - ИСПРАВЛЕНО
+                unfocusedTextColor = Color.White,
+                focusedTextColor = Color.Black,  // Черный текст при фокусе
+
+                // Цвета лейбла
+                unfocusedLabelColor = Color.White.copy(alpha = 0.7f),
+                focusedLabelColor = MaterialTheme.colorScheme.primary,
+
+                // Цвета индикаторов
                 unfocusedIndicatorColor = Color.Transparent,
-                focusedIndicatorColor = Color.Transparent,
+                focusedIndicatorColor = MaterialTheme.colorScheme.primary,
+
+                // Цвета ошибок
                 errorContainerColor = TextFieldBGColor.copy(alpha = 0.1f),
                 errorLabelColor = Color.Red,
                 errorTextColor = Color.Red,
-                errorIndicatorColor = Color.Transparent,
-                cursorColor = TextFieldBGColor,
+                errorIndicatorColor = Color.Red,
+
+                // Цвет курсора
+                cursorColor = MaterialTheme.colorScheme.primary,
+
+                // Disabled состояния
                 disabledContainerColor = TextFieldBGColor.copy(alpha = 0.5f),
-                disabledTextColor = Color.White.copy(alpha = 0.5f),
-                disabledLabelColor = Color.White.copy(alpha = 0.5f)
+                disabledTextColor = Color.Gray,
+                disabledLabelColor = Color.Gray
             ),
             modifier = Modifier
                 .fillMaxWidth()
@@ -165,10 +179,9 @@ fun PersonalTextField(
             textStyle = androidx.compose.ui.text.TextStyle(
                 fontSize = 16.sp,
                 color = when {
-                    readOnly -> Color.White.copy(alpha = 0.7f)
-                    isPassword && !passwordVisible -> Color.White
-                    text.isNotEmpty() -> TextFieldBGColor
-                    else -> Color.White
+                    readOnly -> Color.Gray
+                    isError -> Color.Red
+                    else -> Color.White  // Черный текст по умолчанию
                 }
             ),
             placeholder = {

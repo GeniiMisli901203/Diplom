@@ -214,4 +214,20 @@ interface ApiService {
     suspend fun getAllStudents(): Response<StudentsListResponse>
 
 
+    @GET("/grades/user/{userId}")
+    suspend fun getUserGrades(
+        @Path("userId") userId: String,
+        @Header("Authorization") token: String
+    ): Response<GradeResponse>
+
+    // com.example.ks1compose.models.ApiService.kt
+
+    @PUT("/user/update/{userId}")
+    suspend fun updateUserById(
+        @Path("userId") userId: String,
+        @Header("Authorization") token: String,
+        @Body request: UpdateUserRequest
+    ): Response<UserInformationResponse>
+
+
 }

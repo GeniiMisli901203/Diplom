@@ -102,6 +102,30 @@ class GradeViewModel : ViewModel() {
         }
     }
 
+    fun loadUserGrades(userId: String) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            _error.value = null
+
+            when (val result = repository.getUserGrades(userId)) {
+                is GradeRepository.Result.Success -> {
+                    _myGrades.value = result.data
+                    _averageGrade.value = if (result.data.isNotEmpty()) {
+                        result.data.map { it.gradeValue }.average()
+                    } else {
+                        null
+                    }
+                }
+                is GradeRepository.Result.Error -> {
+                    _error.value = result.message
+                }
+                else -> {}
+            }
+            _isLoading.value = false
+        }
+    }
+
+
     // Загрузка оценок класса (для учителя)
     fun loadClassGrades(className: String, subject: String? = null) {
         viewModelScope.launch {

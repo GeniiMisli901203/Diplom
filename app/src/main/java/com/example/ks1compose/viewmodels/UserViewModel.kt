@@ -18,6 +18,9 @@ class UserViewModel : ViewModel() {
     private val _userInfo = MutableStateFlow<UserDTO?>(null)
     val userInfo: StateFlow<UserDTO?> = _userInfo.asStateFlow()
 
+    private val _editingUser = MutableStateFlow<UserDTO?>(null)
+    val editingUser: StateFlow<UserDTO?> = _editingUser.asStateFlow()
+
     private val _students = MutableStateFlow<List<StudentUIModel>>(emptyList())
     val students: StateFlow<List<StudentUIModel>> = _students.asStateFlow()
 
@@ -29,6 +32,27 @@ class UserViewModel : ViewModel() {
         object Success : UpdateResult()
         data class Error(val message: String) : UpdateResult()
         object Loading : UpdateResult()
+    }
+
+
+    suspend fun getUserById(userId: String): UserRepository.Result<UserDTO> {
+        return repository.getUserById(userId)
+    }
+
+    fun loadUserById(userId: String) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            when (val result = repository.getUserById(userId)) {
+                is UserRepository.Result.Success -> {
+                    _editingUser.value = result.data
+                }
+                is UserRepository.Result.Error -> {
+                    _error.value = result.message
+                }
+                else -> {}
+            }
+            _isLoading.value = false
+        }
     }
 
     private val _updateResult = MutableStateFlow<UpdateResult?>(null)
@@ -71,7 +95,9 @@ class UserViewModel : ViewModel() {
         }
     }
 
+    // com.example.ks1compose.viewmodels.UserViewModel.kt
     fun updateUserInfo(
+        userId: String,  // Добавляем userId
         name: String,
         sName: String,
         uClass: String,
@@ -82,13 +108,22 @@ class UserViewModel : ViewModel() {
             _updateResult.value = UpdateResult.Loading
             _error.value = null
 
-            when (val result = repository.updateUserInfo(name, sName, uClass, school)) {
+            println("📤 Sending update for user $userId: name=$name, sName=$sName, uClass=$uClass, school=$school")
+
+            when (val result = repository.updateUserInfo(userId, name, sName, uClass, school)) {
                 is UserRepository.Result.Success -> {
+                    println("✅ Update successful")
                     _updateResult.value = UpdateResult.Success
-                    // Обновляем локальные данные
-                    loadUserInfo()
+                    // Обновляем editingUser с новыми данными
+                    _editingUser.value = _editingUser.value?.copy(
+                        name = name,
+                        sName = sName,
+                        uClass = uClass,
+                        school = school
+                    )
                 }
                 is UserRepository.Result.Error -> {
+                    println("❌ Update failed: ${result.message}")
                     _updateResult.value = UpdateResult.Error(result.message)
                     _error.value = result.message
                 }

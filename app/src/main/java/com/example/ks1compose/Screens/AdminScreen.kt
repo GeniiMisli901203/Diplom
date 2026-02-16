@@ -22,27 +22,57 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.ks1compose.PersonalUsefulElements.PersonalLoadingIndicator
 import com.example.ks1compose.models.StudentUIModel
 import com.example.ks1compose.models.UserDTO
+import com.example.ks1compose.viewmodels.GradeViewModel
 import com.example.ks1compose.viewmodels.UserViewModel
+
+enum class UserAction {
+    EDIT_PROFILE,
+    DELETE_USER,
+    EDIT_GRADES
+}
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AdminScreen(
     userViewModel: UserViewModel,
+    gradeViewModel: GradeViewModel,
     onNavigateBack: () -> Unit,
-    onUserClick: (String, String) -> Unit = { _, _ -> }
+    onEditProfile: (String) -> Unit,  // Передаем userId
+    onEditGrades: (String) -> Unit     // Передаем userId
 ) {
     val teachers by userViewModel.teachers.collectAsStateWithLifecycle()
-    val students by userViewModel.students.collectAsStateWithLifecycle() // Это List<StudentUIModel>
+    val students by userViewModel.students.collectAsStateWithLifecycle()
     val isLoading by userViewModel.isLoading.collectAsStateWithLifecycle()
     val error by userViewModel.error.collectAsStateWithLifecycle()
 
     var selectedTab by remember { mutableStateOf(0) }
+    var showDeleteDialog by remember { mutableStateOf(false) }
+    var userToDelete by remember { mutableStateOf<String?>(null) }
+    var userTypeToDelete by remember { mutableStateOf("") }
+
     val tabs = listOf("Ученики", "Учителя")
 
     // Загружаем данные при первом входе
     LaunchedEffect(Unit) {
         userViewModel.loadAllTeachers()
         userViewModel.loadAllStudents()
+    }
+
+    fun handleUserAction(userId: String, action: UserAction, userType: String) {
+        when (action) {
+            UserAction.EDIT_PROFILE -> {
+                onEditProfile(userId)
+            }
+            UserAction.EDIT_GRADES -> {
+                onEditGrades(userId)
+            }
+            UserAction.DELETE_USER -> {
+                userToDelete = userId
+                userTypeToDelete = userType
+                showDeleteDialog = true
+            }
+        }
     }
 
     Scaffold(
@@ -66,7 +96,7 @@ fun AdminScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // Табы для переключения между учениками и учителями
+            // Табы
             TabRow(
                 selectedTabIndex = selectedTab,
                 modifier = Modifier
@@ -100,7 +130,7 @@ fun AdminScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Контент в зависимости от выбранного таба
+            // Контент
             when (selectedTab) {
                 0 -> StudentsContent(
                     students = students,
@@ -108,17 +138,54 @@ fun AdminScreen(
                     error = error,
                     onRefresh = { userViewModel.loadAllStudents() },
                     onStudentClick = { studentId, className ->
-                        onUserClick(studentId, className)
+                        // Переход к профилю ученика
+                    },
+                    onStudentAction = { studentId, action ->
+                        handleUserAction(studentId, action, "ученика")
                     }
                 )
                 1 -> TeachersContent(
                     teachers = teachers,
                     isLoading = isLoading,
                     error = error,
-                    onRefresh = { userViewModel.loadAllTeachers() }
+                    onRefresh = { userViewModel.loadAllTeachers() },
+                    onTeacherAction = { teacherId, action ->
+                        handleUserAction(teacherId, action, "учителя")
+                    }
                 )
             }
         }
+    }
+
+    // Диалог подтверждения удаления
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("Подтверждение удаления") },
+            text = { Text("Вы уверены, что хотите удалить этого $userTypeToDelete? Это действие нельзя отменить.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        userToDelete?.let { userId ->
+                            // Здесь будет вызов ViewModel для удаления
+                            // userViewModel.deleteUser(userId)
+                            showDeleteDialog = false
+                            userToDelete = null
+                        }
+                    },
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = Color.Red
+                    )
+                ) {
+                    Text("Удалить")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) {
+                    Text("Отмена")
+                }
+            }
+        )
     }
 }
 
@@ -128,7 +195,8 @@ fun StudentsContent(
     isLoading: Boolean,
     error: String?,
     onRefresh: () -> Unit,
-    onStudentClick: (String, String) -> Unit
+    onStudentClick: (String, String) -> Unit,
+    onStudentAction: (String, UserAction) -> Unit  // ДОБАВЛЯЕМ этот параметр
 ) {
     if (isLoading && students.isEmpty()) {
         PersonalLoadingIndicator()
@@ -195,7 +263,8 @@ fun StudentsContent(
                         StudentClassSection(
                             className = className,
                             students = classStudents,
-                            onStudentClick = onStudentClick
+                            onStudentClick = onStudentClick,
+                            onStudentAction = onStudentAction  // ПЕРЕДАЕМ параметр
                         )
                     }
                 }
@@ -207,7 +276,8 @@ fun StudentsContent(
                         StudentClassSection(
                             className = "Без класса",
                             students = studentsWithoutClass,
-                            onStudentClick = onStudentClick
+                            onStudentClick = onStudentClick,
+                            onStudentAction = onStudentAction  // ПЕРЕДАЕМ параметр
                         )
                     }
                 }
@@ -220,8 +290,9 @@ fun StudentsContent(
 @Composable
 fun StudentClassSection(
     className: String,
-    students: List<StudentUIModel>, // Используем StudentUIModel
-    onStudentClick: (String, String) -> Unit
+    students: List<StudentUIModel>,
+    onStudentClick: (String, String) -> Unit,
+    onStudentAction: (String, UserAction) -> Unit  // Добавляем callback для действий
 ) {
     Column(
         modifier = Modifier.fillMaxWidth()
@@ -242,7 +313,7 @@ fun StudentClassSection(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "$className класс",
+                    text = if (className == "Без класса") "Без класса" else "$className класс",
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
@@ -259,7 +330,8 @@ fun StudentClassSection(
         students.forEach { student ->
             StudentCard(
                 student = student,
-                onClick = { onStudentClick(student.id, className) }
+                onClick = { onStudentClick(student.id, className) },
+                onAction = { action -> onStudentAction(student.id, action) }
             )
         }
     }
@@ -267,9 +339,12 @@ fun StudentClassSection(
 
 @Composable
 fun StudentCard(
-    student: StudentUIModel, // Используем StudentUIModel
-    onClick: () -> Unit
+    student: StudentUIModel,
+    onClick: () -> Unit,
+    onAction: (UserAction) -> Unit  // Добавляем callback для действий
 ) {
+    var expanded by remember { mutableStateOf(false) }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -324,13 +399,64 @@ fun StudentCard(
                 }
             }
 
-            // Кнопка действий
-            IconButton(onClick = onClick) {
-                Icon(
-                    Icons.Default.ChevronRight,
-                    contentDescription = "Перейти",
-                    tint = Color.Gray
-                )
+            // Кнопка с тремя точками
+            Box {
+                IconButton(onClick = { expanded = true }) {
+                    Icon(
+                        Icons.Default.MoreVert,
+                        contentDescription = "Действия",
+                        tint = Color.Gray
+                    )
+                }
+
+                DropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Редактировать профиль") },
+                        onClick = {
+                            expanded = false
+                            onAction(UserAction.EDIT_PROFILE)
+                        },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Default.Edit,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Редактировать оценки") },
+                        onClick = {
+                            expanded = false
+                            onAction(UserAction.EDIT_GRADES)
+                        },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Default.Grade,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Удалить", color = Color.Red) },
+                        onClick = {
+                            expanded = false
+                            onAction(UserAction.DELETE_USER)
+                        },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Default.Delete,
+                                contentDescription = null,
+                                tint = Color.Red,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    )
+                }
             }
         }
     }
@@ -341,7 +467,8 @@ fun TeachersContent(
     teachers: List<UserDTO>,
     isLoading: Boolean,
     error: String?,
-    onRefresh: () -> Unit
+    onRefresh: () -> Unit,
+    onTeacherAction: (String, UserAction) -> Unit  // Добавляем callback
 ) {
     if (isLoading && teachers.isEmpty()) {
         PersonalLoadingIndicator()
@@ -369,7 +496,7 @@ fun TeachersContent(
                     .padding(16.dp),
                 horizontalArrangement = Arrangement.Center
             ) {
-                AdminStatItem(  // Переименовано
+                AdminStatItem(
                     value = teachers.size.toString(),
                     label = "Всего учителей"
                 )
@@ -377,18 +504,21 @@ fun TeachersContent(
         }
 
         if (error != null) {
-            AdminErrorMessage(  // Переименовано
+            AdminErrorMessage(
                 message = error,
                 onRetry = onRefresh
             )
         } else if (teachers.isEmpty()) {
-            AdminEmptyUsersMessage(type = "учителей")  // Переименовано
+            AdminEmptyUsersMessage(type = "учителей")
         } else {
             LazyColumn(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(teachers) { teacher ->
-                    TeacherCard(teacher = teacher)
+                    TeacherCard(
+                        teacher = teacher,
+                        onAction = { action -> onTeacherAction(teacher.userId, action) }
+                    )
                 }
             }
         }
@@ -397,8 +527,11 @@ fun TeachersContent(
 
 @Composable
 fun TeacherCard(
-    teacher: UserDTO
+    teacher: UserDTO,
+    onAction: (UserAction) -> Unit  // Добавляем callback для действий
 ) {
+    var expanded by remember { mutableStateOf(false) }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -447,12 +580,57 @@ fun TeacherCard(
                     fontSize = 12.sp,
                     color = Color.Gray
                 )
-                // Проверяем на null и пустую строку безопасно
                 if (teacher.uClass != null && teacher.uClass.isNotBlank()) {
                     Text(
                         text = "Классный руководитель: ${teacher.uClass}",
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+
+            // Кнопка с тремя точками
+            Box {
+                IconButton(onClick = { expanded = true }) {
+                    Icon(
+                        Icons.Default.MoreVert,
+                        contentDescription = "Действия",
+                        tint = Color.Gray
+                    )
+                }
+
+                DropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Редактировать профиль") },
+                        onClick = {
+                            expanded = false
+                            onAction(UserAction.EDIT_PROFILE)
+                        },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Default.Edit,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Удалить", color = Color.Red) },
+                        onClick = {
+                            expanded = false
+                            onAction(UserAction.DELETE_USER)
+                        },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Default.Delete,
+                                contentDescription = null,
+                                tint = Color.Red,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
                     )
                 }
             }

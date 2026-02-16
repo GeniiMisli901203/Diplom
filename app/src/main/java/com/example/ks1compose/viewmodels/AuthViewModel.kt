@@ -5,6 +5,7 @@ import com.example.ks1compose.models.RegistrationRequest
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.ks1compose.models.TokenManager
 import com.example.ks1compose.models.TokenResponse
 import com.example.ks1compose.repositories.AuthRepository
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -50,6 +51,13 @@ class AuthViewModel : ViewModel() {
             }
             _isLoading.value = false
         }
+    }
+
+    fun clearUserData() {
+        TokenManager.clear()
+        _loginResult.value = null
+        _registerResult.value = null
+        _errorMessage.value = null
     }
 
     fun register(
